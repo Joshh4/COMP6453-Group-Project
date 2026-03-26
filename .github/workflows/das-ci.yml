@@ -6,11 +6,6 @@ on:
       - "main"
     paths:
       - "src/**"
-  push_request:
-    branches:
-      - "main"
-    paths:
-      - "src/**"
 
 jobs:
   build:
