@@ -6,6 +6,7 @@ on:
       - "main"
     paths:
       - "src/**"
+      - "tests/**"
 
 jobs:
   build:
@@ -33,17 +34,17 @@ jobs:
 
       # 2. UNIT TESTING
       - name: Run unit tests
-        run: pytest src/tests/unit/
+        run: pytest tests/unit/
 
       # 2. INTEGRATION TESTING
       - name: Run integration tests
-        run: pytest src/tests/integration/
+        run: pytest tests/integration/
         continue-on-error: true
 
       # 4. COVERAGE TESTING
       - name: Run coverage
         run: |
-          coverage run -m pytest src/tests/
+          coverage run -m pytest tests/
           coverage report
           coverage html
         continue-on-error: true
