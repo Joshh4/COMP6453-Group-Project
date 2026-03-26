@@ -42,8 +42,8 @@ To ensure your environment matches the team standards, run:
 ```bash
 
 # 1. Clone the new repo
-  git clone git@github.com:yuvran7700/ECHO_CLEARPATH.git
-  cd ECHO_CLEARPATH
+  git clone git@github.com:Joshh4/COMP6453-Group-Project.git
+  cd COMP6453-Group-Project
 
 # 2. Create and Activate Virtual Environment (ROOT LEVEL)
   python -m venv venv
@@ -54,10 +54,6 @@ To ensure your environment matches the team standards, run:
 
 # 4. Set Up Pre-Commit Hooks
   pip install pre-commit
-  sh util/setup.sh
+
 ```
-After this, every `git commit` will automatically:
-- Format your code with black
-- Sort imports with isort
-- Lint with flake8
-- Reject commits over 200 lines
+After this, every `git commit` will automatically lint with ruff

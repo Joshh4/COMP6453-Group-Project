@@ -3,7 +3,7 @@ ruff==0.3.0
 coverage==7.4.1
 pytest==8.0.0
 Reedsolo
-MerkleTools
 Asyncio==4.0.0 
 Pandas 
 Galois
+pymerkle
