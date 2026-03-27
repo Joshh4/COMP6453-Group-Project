@@ -7,3 +7,4 @@ Asyncio==4.0.0
 Pandas 
 Galois
 pymerkle
+hashlib
