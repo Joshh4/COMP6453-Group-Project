@@ -4,13 +4,15 @@ from typing import List, Tuple
 
 class MerkleTree:
     """
-    This class builds a Merkle tree from a list of byte chunks and provides
-    functionality to retrieve the Merkle root, generate proofs, and verify proofs.
+    This class builds a Merkle tree from a list of byte chunks and
+    provides functionality to retrieve the Merkle root, generate
+    proofs, and verify proofs.
 
     Input:
         chunks
             Type: List[bytes]
-            Each chunk should be raw data (e.g. blockchain data without headers).
+            Each chunk should be raw data
+            (e.g. blockchain data without headers).
 
     Variables:
         self.chunks
@@ -112,9 +114,9 @@ class MerkleTree:
             Output:
                 bool
             Description:
-                Verifies that a chunk belongs to a Merkle tree with the given root
-                by reconstructing the hash using the proof. Returns True if valid,
-                otherwise False.
+                Verifies that a chunk belongs to a Merkle tree with the
+                given root by reconstructing the hash using the proof.
+                Returns True if valid, otherwise False.
     """
 
     def __init__(self, chunks: List[bytes]):
@@ -125,7 +127,7 @@ class MerkleTree:
 
         for i in range(len(chunks)):
             chunk = chunks[i]
-            if isinstance(chunk, bytes) == False:
+            if not isinstance(chunk, bytes):
                 raise TypeError(f"Chunk at index {i} is not bytes")
 
         # Copy chunks
@@ -193,7 +195,9 @@ class MerkleTree:
         proof = []
         current_index = index
 
-        # Loop through each level except root - only follows one vertical path, not every node in each level
+        # Loop through each level except root.
+        # Only follows one vertical path,
+        # not every node in each level.
         for level in self.levels[:-1]:
             level_nodes = level[:]
 
@@ -220,16 +224,16 @@ class MerkleTree:
         cls, chunk: bytes, proof: List[Tuple[bytes, str]], root: bytes
     ) -> bool:
         # Error Check
-        if isinstance(chunk, bytes) == False:
+        if not isinstance(chunk, bytes):
             raise TypeError("Chunk must be bytes")
-        if isinstance(root, bytes) == False:
+        if not isinstance(root, bytes):
             raise TypeError("Root must be bytes")
 
         current_hash = cls._hash_leaf(chunk)
 
         # Loop through proof and begin hashing by proof direction
         for sibling_hash, direction in proof:
-            if isinstance(sibling_hash, bytes) == False:
+            if not isinstance(sibling_hash, bytes):
                 raise TypeError("Proof sibling hashes must be bytes")
 
             if direction == "right":
