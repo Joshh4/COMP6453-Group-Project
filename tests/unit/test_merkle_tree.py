@@ -1,5 +1,5 @@
 import pytest
-from merkle_tree import MerkleTree
+from src.commitments.merkle_tree import MerkleTree
 
 
 @pytest.fixture
