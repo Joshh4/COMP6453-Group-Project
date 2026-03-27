@@ -1,6 +1,7 @@
 import hashlib
 from typing import List, Tuple
 
+
 class MerkleTree:
     """
     This class builds a Merkle tree from a list of byte chunks and provides
@@ -115,6 +116,7 @@ class MerkleTree:
                 by reconstructing the hash using the proof. Returns True if valid,
                 otherwise False.
     """
+
     def __init__(self, chunks: List[bytes]):
 
         # Error checks
@@ -166,7 +168,9 @@ class MerkleTree:
 
             # Loop through current levels jumping by two and hash siblings
             for i in range(0, len(current_level), 2):
-                parent = self._hash_pair(current_level[i], current_level[i + 1])
+                parent = self._hash_pair(
+                    current_level[i], current_level[i + 1]
+                )
                 next_level.append(parent)
 
             self.levels.append(next_level)
@@ -212,7 +216,9 @@ class MerkleTree:
         return proof
 
     @classmethod
-    def verify_proof(cls, chunk: bytes, proof: List[Tuple[bytes, str]], root: bytes) -> bool:
+    def verify_proof(
+        cls, chunk: bytes, proof: List[Tuple[bytes, str]], root: bytes
+    ) -> bool:
         # Error Check
         if isinstance(chunk, bytes) == False:
             raise TypeError("Chunk must be bytes")
