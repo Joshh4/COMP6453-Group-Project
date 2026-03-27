@@ -120,7 +120,6 @@ class MerkleTree:
     """
 
     def __init__(self, chunks: List[bytes]):
-
         # Error checks
         if len(chunks) == 0:
             raise ValueError("Cannot pass empty chunks")
