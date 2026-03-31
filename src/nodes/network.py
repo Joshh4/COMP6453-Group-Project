@@ -76,12 +76,12 @@ JSON serialisation bridge
 """
 
 import asyncio
+import hashlib
 import json
 import logging
-import hashlib
 import random
 from dataclasses import dataclass
-from typing import Optional, List, Tuple
+from typing import List, Optional, Tuple
 
 from src.commitments.merkle_tree import MerkleTree
 
