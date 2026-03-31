@@ -4,7 +4,6 @@ from utils.csv_logger import CSVLogger
 def benchmark_detection_probability(
     merkle,
     chunks,
-    verify_fn,
     withholding_ratio_list,
     samples,
     trials=200
