@@ -14,10 +14,13 @@ check is too expensive, especially for phones or light clients.
 
 CONDA's solution:
   1. The block is erasure-coded into n pieces called "symbols", one per node.
-     Erasure coding means you only need k of the n symbols to reconstruct the
-     full block (k < n), so even if some nodes are offline it's still recoverable.
-  2. A cryptographic commitment is made to the whole block and shared with everyone.
-  3. Each node gets its own unique symbol plus a proof that the symbol is genuine.
+     Erasure coding means you only need k of the n symbols to reconstruct
+     the full block (k < n), so even if some nodes are offline it's still
+     recoverable.
+  2. A cryptographic commitment is made to the whole block and shared with
+     everyone.
+  3. Each node gets its own unique symbol plus a proof that the symbol is
+     genuine.
   4. Verifiers (light clients) ask a random subset of nodes for their symbols,
      check the proofs, and if enough pass they know the block is available.
 
@@ -33,46 +36,53 @@ The three roles
               the proofs, and decides whether the block is available.
 
 --------------
-Each DA node gets exactly one unique symbol. There is no grouping or replication
-at the network level -- the erasure code itself provides redundancy. This is
-different from committee-based designs (like PeerDAS) and is what makes CONDA
-scale to thousands of nodes efficiently.
+Each DA node gets exactly one unique symbol. There is no grouping or
+replication at the network level -- the erasure code itself provides
+redundancy. This is different from committee-based designs (like PeerDAS)
+and is what makes CONDA scale to thousands of nodes efficiently.
 
 Plug-in points for teammates
 -----------------------------
   erasure_coding.py  ->  replace _stub_encode()      [NOT YET INTEGRATED]
                          Must return: (symbols, chunks)
                            symbols : list[list[int]]  one per DA node
-                           chunks  : list[bytes]       one bytes object per node,
-                                     used to build the Merkle tree. With a plain
-                                     byte-split this is just bytes(symbol) for each
-                                     symbol, but a Reed-Solomon encoding may produce
-                                     different column bytes -- your teammate decides.
+                           chunks  : list[bytes]       one bytes object per
+                                     node, used to build the Merkle tree.
+                                     With a plain byte-split this is just
+                                     bytes(symbol) for each symbol, but a
+                                     Reed-Solomon encoding may produce
+                                     different column bytes -- your teammate
+                                     decides.
 
 Commitment scheme (MerkleTree -- already integrated)
 ----------------------------------------------------
   _stub_encode() still returns raw byte-slices of the block (unchanged).
-  Those slices are passed as chunks to MerkleTree so the commitment and proofs
-  are real cryptographic Merkle proofs rather than fake SHA-256 hashes.
+  Those slices are passed as chunks to MerkleTree so the commitment and
+  proofs are real cryptographic Merkle proofs rather than fake SHA-256
+  hashes.
 
   disperser side:
     symbols, chunks = _stub_encode(block_data, n)
     tree            = MerkleTree(chunks)
-    commitment      = tree.get_root().hex()          # broadcast as a hex string
+    commitment      = tree.get_root().hex()   # broadcast as a hex string
     proof[j]        = proof_to_json(tree.get_proof(j))
 
   verifier side:
-    chunk = bytes(symbol.data)                       # reconstruct the bytes chunk
+    chunk = bytes(symbol.data)                # reconstruct the bytes chunk
     root  = bytes.fromhex(resp["commitment"])
     proof = proof_from_json(resp["proof"])
     valid = MerkleTree.verify_proof(chunk, proof, root)
 
 JSON serialisation bridge
 -------------------------
-  Merkle proofs are List[Tuple[bytes, str]] and cannot travel over JSON directly.
-  proof_to_json()   encodes each sibling hash as a hex string: [[hex, dir], ...]
-  proof_from_json() decodes back to List[Tuple[bytes, str]] for verify_proof().
-  The commitment (bytes) travels as a hex string via .hex() / bytes.fromhex().
+  Merkle proofs are List[Tuple[bytes, str]] and cannot travel over JSON
+  directly.
+  proof_to_json()   encodes each sibling hash as a hex string:
+                    [[hex, dir], ...]
+  proof_from_json() decodes back to List[Tuple[bytes, str]] for
+                    verify_proof().
+  The commitment (bytes) travels as a hex string via .hex() /
+  bytes.fromhex().
 """
 
 import asyncio
@@ -85,7 +95,8 @@ from typing import List, Optional, Tuple
 
 from src.commitments.merkle_tree import MerkleTree
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
+logging.basicConfig(level=logging.INFO, 
+                    format="%(asctime)s [%(name)s] %(message)s")
 
 
 # =============================================================================
@@ -113,7 +124,7 @@ class Symbol:
     n_total    : total number of pieces
     data       : the symbol content as a list of ints (raw bytes of the chunk)
     commitment : Merkle root as a hex string (same value on every node)
-    proof      : JSON-safe Merkle inclusion proof -- list of [hex_str, direction]
+    proof      : JSON-safe Merkle inclusion proof -- list of [hex_str, dir]
     """
     block_id:   str
     index:      int
@@ -155,8 +166,8 @@ def proof_to_json(proof: List[Tuple[bytes, str]]) -> list:
     Convert a MerkleTree proof to a JSON-serialisable list.
 
     MerkleTree.get_proof() returns List[Tuple[bytes, str]] where the first
-    element of each tuple is a raw bytes sibling hash. JSON has no bytes type,
-    so we hex-encode each hash.
+    element of each tuple is a raw bytes sibling hash. JSON has no bytes
+    type, so we hex-encode each hash.
 
     Returns: [[hex_str, direction], ...]
     """
@@ -169,7 +180,10 @@ def proof_from_json(raw_proof: list) -> List[Tuple[bytes, str]]:
 
     Returns: List[Tuple[bytes, str]] -- ready for MerkleTree.verify_proof().
     """
-    return [(bytes.fromhex(hex_str), direction) for hex_str, direction in raw_proof]
+    return [
+        (bytes.fromhex(hex_str), direction)
+        for hex_str, direction in raw_proof
+    ]
 
 
 # =============================================================================
@@ -190,7 +204,9 @@ class BaseNode:
 
     def __init__(self, info: NodeInfo):
         self.info = info
-        self.logger = logging.getLogger(f"{self.__class__.__name__}({info.node_id})")
+        self.logger = logging.getLogger(
+            f"{self.__class__.__name__}({info.node_id})"
+        )
         self._server: Optional[asyncio.Server] = None
 
     async def start(self):
@@ -247,7 +263,9 @@ class BaseNode:
         is expected (e.g. sending a symbol to a DA node).
         """
         try:
-            reader, writer = await asyncio.open_connection(target.host, target.port)
+            reader, writer = await asyncio.open_connection(
+                target.host, target.port
+            )
             writer.write(encode_msg(msg_type, payload))
             await writer.drain()
 
@@ -298,17 +316,17 @@ class Disperser(BaseNode):
         self.logger.info(f"Dispersing block {block_id} to {n} DA nodes")
 
         # Step 1: encode the block into n symbols.
-        # --- replace with: symbols, chunks = erasure_coding.encode(block_data, n) ---
+        # replace with: symbols, chunks = erasure_coding.encode(block_data, n)
         # symbols[j] : list[int]  -- the piece sent to DA node j (JSON-safe)
         # chunks[j]  : bytes      -- the bytes used to build the Merkle tree
         #              (with plain byte-slicing these are identical; a real RS
         #               encoding may produce different column bytes)
         symbols, chunks = _stub_encode(block_data, n)
-        # -------------------------------------------------------------------------
+        # ---------------------------------------------------------------------
 
         # Step 2: build the Merkle tree over the chunks.
-        # The root is the commitment -- a cryptographic fingerprint of the whole
-        # block that every node and every verifier can use to check their piece.
+        # The root is the commitment - a cryptographic fingerprint of the whole
+        # block that every node and every verifier can use to check their piece
         tree       = MerkleTree(chunks)
         commitment = tree.get_root().hex()  # travels as a hex string over JSON
 
@@ -340,7 +358,8 @@ class Disperser(BaseNode):
 
 class DANode(BaseNode):
     """
-    A storage node. Holds one unique symbol per block and serves it on request.
+    A storage node. Holds one unique symbol per block and serves it on
+    request.
 
     DA nodes don't verify what they receive -- they trust the disperser.
     Verifiers are responsible for checking proofs.
@@ -404,7 +423,12 @@ class Verifier(BaseNode):
     symbol for the block to be declared available.
     """
 
-    def __init__(self, info: NodeInfo, da_nodes: list[NodeInfo], sample_count: int = 0):
+    def __init__(
+        self,
+        info: NodeInfo,
+        da_nodes: list[NodeInfo],
+        sample_count: int = 0,
+    ):
         super().__init__(info)
         self.da_nodes     = da_nodes
         self.sample_count = sample_count if sample_count > 0 else len(da_nodes)
@@ -435,7 +459,7 @@ class Verifier(BaseNode):
                 continue
 
             if resp.get("type") == MSG_SAMPLE_RESP:
-                # Reconstruct the bytes chunk and the Merkle root, then verify.
+                # Reconstruct the bytes chunk and Merkle root, then verify.
                 chunk = bytes(resp["data"])
                 root  = bytes.fromhex(resp["commitment"])
                 proof = proof_from_json(resp["proof"])
@@ -449,7 +473,7 @@ class Verifier(BaseNode):
                         f"Bad Merkle proof for symbol {resp['index']} "
                         f"of block {block_id} -- the node may be dishonest"
                     )
-            # MSG_UNAVAILABLE means that node doesn't have the block -- failure.
+            # MSG_UNAVAILABLE means that node doesn't have the block - failure.
 
         available = (success == self.sample_count)
         status    = MSG_AVAILABLE if available else MSG_UNAVAILABLE
@@ -508,8 +532,11 @@ async def demo():
     ]
 
     port           = BASE_PORT + N_DA_NODES
-    disperser_info = NodeInfo("disperser", "127.0.0.1", port); port += 1
-    verifier_infos = [NodeInfo(f"verifier-{i}", "127.0.0.1", port + i) for i in range(3)]
+    disperser_info = NodeInfo("disperser", "127.0.0.1", port)
+    port          += 1
+    verifier_infos = [
+        NodeInfo(f"verifier-{i}", "127.0.0.1", port + i) for i in range(3)
+    ]
 
     da_nodes  = [DANode(info) for info in da_node_infos]
     disperser = Disperser(disperser_info, da_node_infos)
@@ -520,7 +547,7 @@ async def demo():
 
     await asyncio.sleep(0.3)
 
-    block_data = b"Hello CONDA! This is example block data for the DA demo." * 4
+    block_data = b"Hello CONDA! This is example block data for the DA demo" * 4
     block_id   = await disperser.disperse(block_data)
 
     await asyncio.sleep(0.2)
