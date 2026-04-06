@@ -179,9 +179,7 @@ def proof_to_json(proof: List[Tuple[bytes, str]]) -> list:
 
     Returns: [[hex_str, direction], ...]
     """
-    return [
-        [sibling.hex(), direction] for sibling, direction in proof
-    ]
+    return [[sibling.hex(), direction] for sibling, direction in proof]
 
 
 def proof_from_json(raw_proof: list) -> List[Tuple[bytes, str]]:
@@ -191,8 +189,7 @@ def proof_from_json(raw_proof: list) -> List[Tuple[bytes, str]]:
     Returns: List[Tuple[bytes, str]] -- ready for MerkleTree.verify_proof().
     """
     return [
-        (bytes.fromhex(hex_str), direction)
-        for hex_str, direction in raw_proof
+        (bytes.fromhex(hex_str), direction) for hex_str, direction in raw_proof
     ]
 
 
@@ -225,9 +222,7 @@ class BaseNode:
         self._server = await asyncio.start_server(
             self._handle_connection, self.info.host, self.info.port
         )
-        self.logger.info(
-            f"Listening on {self.info.host}:{self.info.port}"
-        )
+        self.logger.info(f"Listening on {self.info.host}:{self.info.port}")
         async with self._server:
             await self._server.serve_forever()
 
@@ -286,9 +281,7 @@ class BaseNode:
 
             result = None
             if wait_for_reply:
-                raw = await asyncio.wait_for(
-                    reader.readline(), timeout=5.0
-                )
+                raw = await asyncio.wait_for(reader.readline(), timeout=5.0)
                 if raw:
                     result = decode_msg(raw)
 
@@ -297,9 +290,7 @@ class BaseNode:
             return result
 
         except (ConnectionRefusedError, asyncio.TimeoutError) as e:
-            self.logger.warning(
-                f"Could not reach {target.node_id}: {e}"
-            )
+            self.logger.warning(f"Could not reach {target.node_id}: {e}")
             return None
 
 
@@ -334,9 +325,7 @@ class Disperser(BaseNode):
         """
         n = len(self.da_nodes)
         block_id = hashlib.sha256(block_data).hexdigest()[:12]
-        self.logger.info(
-            f"Dispersing block {block_id} to {n} DA nodes"
-        )
+        self.logger.info(f"Dispersing block {block_id} to {n} DA nodes")
 
         # Step 1: encode the block into n symbols.
         # replace with:
@@ -370,9 +359,7 @@ class Disperser(BaseNode):
                 "proof": proof,
             }
             tasks.append(
-                self.send(
-                    node, MSG_SYMBOL, payload, wait_for_reply=False
-                )
+                self.send(node, MSG_SYMBOL, payload, wait_for_reply=False)
             )
 
         await asyncio.gather(*tasks)
@@ -422,9 +409,7 @@ class DANode(BaseNode):
             symbol = self.store.get(block_id)
 
             if symbol is None:
-                return encode_msg(
-                    MSG_UNAVAILABLE, {"block_id": block_id}
-                )
+                return encode_msg(MSG_UNAVAILABLE, {"block_id": block_id})
 
             return encode_msg(
                 MSG_SAMPLE_RESP,
@@ -463,9 +448,7 @@ class Verifier(BaseNode):
     ):
         super().__init__(info)
         self.da_nodes = da_nodes
-        self.sample_count = (
-            sample_count if sample_count > 0 else len(da_nodes)
-        )
+        self.sample_count = sample_count if sample_count > 0 else len(da_nodes)
 
     async def handle_message(self, msg: dict) -> Optional[bytes]:
         return None  # verifiers only make requests; they never serve data
@@ -582,9 +565,7 @@ async def demo():
     verifiers = [Verifier(info, da_node_infos) for info in verifier_infos]
 
     all_nodes = da_nodes + [disperser] + verifiers
-    server_tasks = [
-        asyncio.create_task(node.start()) for node in all_nodes
-    ]
+    server_tasks = [asyncio.create_task(node.start()) for node in all_nodes]
 
     await asyncio.sleep(0.3)
 
@@ -595,9 +576,7 @@ async def demo():
 
     await asyncio.sleep(0.2)
 
-    results = await asyncio.gather(
-        *[v.sample(block_id) for v in verifiers]
-    )
+    results = await asyncio.gather(*[v.sample(block_id) for v in verifiers])
     print(f"\nSampling results: {results}")
     print("All available?", all(results))
 
