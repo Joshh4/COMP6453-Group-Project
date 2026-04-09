@@ -26,16 +26,15 @@ SubnetRegistry mapping.
 
 import asyncio
 import unittest
+
 from src.nodes.peerdas_network import (
     DANode,
     Disperser,
-    MSG_COLUMN,
     MSG_SAMPLE_REQ,
     MSG_UNAVAILABLE,
     NodeInfo,
     SubnetRegistry,
     Verifier,
-    decode_msg,
     encode_msg,
 )
 
@@ -52,15 +51,17 @@ class TestDANodeStoresColumn(unittest.IsolatedAsyncioTestCase):
         After the disperser sends a block, the DA node should have
         the column in its store with the correct metadata.
         """
-        da_info   = NodeInfo("da-0", "127.0.0.1", 9200)
+        da_info = NodeInfo("da-0", "127.0.0.1", 9200)
         disp_info = NodeInfo("disperser", "127.0.0.1", 9201)
 
         # DA node custodies column 0.  The disperser will produce
         # N_COLS_DEFAULT = 8 columns, so only col 0 lands here.
-        da_node   = DANode(da_info, custody_columns={0})
-        custody   = {"da-0": {0}}
-        registry  = SubnetRegistry([da_info], custody)
-        disperser = Disperser(disp_info, registry, n_blobs=2, n_cols=8)
+        da_node = DANode(da_info, custody_columns={0})
+        custody = {"da-0": {0}}
+        registry = SubnetRegistry([da_info], custody)
+        disperser = Disperser(
+            disp_info, registry, n_blobs=2, n_cols=8
+        )
 
         tasks = [
             asyncio.create_task(da_node.start()),
@@ -70,7 +71,7 @@ class TestDANodeStoresColumn(unittest.IsolatedAsyncioTestCase):
 
         # Disperse a block -- this delivers column 0 to da_node.
         block_data = b"test block for column storage check"
-        block_id   = await disperser.disperse(block_data)
+        block_id = await disperser.disperse(block_data)
 
         # Give the DA node a moment to finish writing to its store.
         await asyncio.sleep(0.1)
@@ -138,9 +139,9 @@ class TestDANodeIgnoresNonCustodiedColumn(
         da_info = NodeInfo("da-0", "127.0.0.1", 9210)
         da_node = DANode(da_info, custody_columns={0})
 
-        # We need a second node to send the rogue column message.
+        # Reuse Verifier's send() helper to fire a rogue column msg.
         sender_info = NodeInfo("sender", "127.0.0.1", 9211)
-        sender      = Verifier(sender_info)  # reuse send() helper
+        sender = Verifier(sender_info)
 
         tasks = [
             asyncio.create_task(da_node.start()),
@@ -150,16 +151,16 @@ class TestDANodeIgnoresNonCustodiedColumn(
 
         # Send a column the DA node doesn't custody (col_index=5).
         rogue_payload = {
-            "block_id":    "aabbccdd1122",
-            "col_index":   5,
-            "n_cols":      8,
-            "cells":       [[1, 2, 3], [4, 5, 6]],
+            "block_id": "aabbccdd1122",
+            "col_index": 5,
+            "n_cols": 8,
+            "cells": [[1, 2, 3], [4, 5, 6]],
             "commitments": ["deadbeef", "cafebabe"],
-            "proof":       "00112233",
+            "proof": "00112233",
         }
         await sender.send(
             da_info,
-            MSG_COLUMN,
+            "COLUMN",
             rogue_payload,
             wait_for_reply=False,
         )
@@ -169,7 +170,7 @@ class TestDANodeIgnoresNonCustodiedColumn(
         self.assertEqual(
             len(da_node.store),
             0,
-            "DA node must not store a column outside its custody set",
+            "DA node must not store a column outside its custody",
         )
 
         for task in tasks:
@@ -188,10 +189,10 @@ class TestDANodeServesUnavailable(unittest.IsolatedAsyncioTestCase):
         If a verifier asks for a column the DA node does not have,
         the node must respond with MSG_UNAVAILABLE.
         """
-        da_info       = NodeInfo("da-0", "127.0.0.1", 9220)
+        da_info = NodeInfo("da-0", "127.0.0.1", 9220)
         verifier_info = NodeInfo("verifier", "127.0.0.1", 9221)
 
-        da_node  = DANode(da_info, custody_columns={0, 1})
+        da_node = DANode(da_info, custody_columns={0, 1})
         verifier = Verifier(verifier_info)
 
         tasks = [
@@ -257,7 +258,9 @@ class TestSubnetRegistry(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(col0[0].node_id, "da-0")
 
         # Column 1 is custodied by both da-0 and da-1.
-        col1_ids = {n.node_id for n in registry.nodes_for_column(1)}
+        col1_ids = {
+            n.node_id for n in registry.nodes_for_column(1)
+        }
         self.assertEqual(col1_ids, {"da-0", "da-1"})
 
         # Column 3 is only custodied by da-2.
