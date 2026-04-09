@@ -251,9 +251,7 @@ class BaseNode:
             self.info.host,
             self.info.port,
         )
-        self.logger.info(
-            f"Listening on {self.info.host}:{self.info.port}"
-        )
+        self.logger.info(f"Listening on {self.info.host}:{self.info.port}")
         async with self._server:
             await self._server.serve_forever()
 
@@ -309,9 +307,7 @@ class BaseNode:
 
             result = None
             if wait_for_reply:
-                raw = await asyncio.wait_for(
-                    reader.readline(), timeout=5.0
-                )
+                raw = await asyncio.wait_for(reader.readline(), timeout=5.0)
                 if raw:
                     result = decode_msg(raw)
 
@@ -320,9 +316,7 @@ class BaseNode:
             return result
 
         except (ConnectionRefusedError, asyncio.TimeoutError) as e:
-            self.logger.warning(
-                f"Could not reach {target.node_id}: {e}"
-            )
+            self.logger.warning(f"Could not reach {target.node_id}: {e}")
             return None
 
 
@@ -379,9 +373,7 @@ class Disperser(BaseNode):
         # If one custodian is offline, others can still serve it.
         tasks = []
         for col_idx in range(self.n_cols):
-            col_cells = [
-                matrix[b][col_idx] for b in range(self.n_blobs)
-            ]
+            col_cells = [matrix[b][col_idx] for b in range(self.n_blobs)]
             payload = {
                 "block_id": block_id,
                 "col_index": col_idx,
@@ -393,8 +385,7 @@ class Disperser(BaseNode):
             subnet = self.registry.nodes_for_column(col_idx)
             if not subnet:
                 self.logger.warning(
-                    f"No nodes custody col {col_idx}"
-                    " -- column will be lost"
+                    f"No nodes custody col {col_idx}" " -- column will be lost"
                 )
             for node in subnet:
                 tasks.append(
@@ -450,8 +441,7 @@ class DANode(BaseNode):
         col_idx = msg["col_index"]
         if col_idx not in self.custody_columns:
             self.logger.warning(
-                f"Received col {col_idx} outside custody"
-                " -- discarding"
+                f"Received col {col_idx} outside custody" " -- discarding"
             )
             return None
 
@@ -464,9 +454,7 @@ class DANode(BaseNode):
             proof=msg["proof"],
         )
         self.store.setdefault(col.block_id, {})[col_idx] = col
-        self.logger.info(
-            f"Stored col {col_idx} for block {col.block_id}"
-        )
+        self.logger.info(f"Stored col {col_idx} for block {col.block_id}")
         return None
 
     def _handle_sample_req(self, msg: dict) -> bytes:
@@ -588,9 +576,7 @@ def _rs_encode_matrix(
     n_cols must therefore be <= 255.  128 (Ethereum spec) is fine.
     """
     if n_cols >= 256:
-        raise ValueError(
-            f"n_cols must be < 256 for GF(256) RS; got {n_cols}"
-        )
+        raise ValueError(f"n_cols must be < 256 for GF(256) RS; got {n_cols}")
 
     # k = half the columns (rate-1/2 matches PeerDAS spec).
     k = n_cols // 2
@@ -599,8 +585,7 @@ def _rs_encode_matrix(
     # Split raw data evenly across blobs, padding the last one.
     blob_size = max(1, len(data) // n_blobs)
     raw_blobs = [
-        data[b * blob_size : (b + 1) * blob_size]
-        for b in range(n_blobs)
+        data[b * blob_size : (b + 1) * blob_size] for b in range(n_blobs)
     ]
 
     matrix = []
@@ -656,20 +641,15 @@ def _byte_split_matrix(
     ]
 
     matrix = [
-        [flat[b * n_cols + c] for c in range(n_cols)]
-        for b in range(n_blobs)
+        [flat[b * n_cols + c] for c in range(n_cols)] for b in range(n_blobs)
     ]
 
     commitments = [
-        _stub_kzg_commit(
-            bytes(matrix[b][c][0] for c in range(n_cols))
-        )
+        _stub_kzg_commit(bytes(matrix[b][c][0] for c in range(n_cols)))
         for b in range(n_blobs)
     ]
     col_proofs = [
-        _stub_kzg_multiproof(
-            bytes(matrix[b][c][0] for b in range(n_blobs))
-        )
+        _stub_kzg_multiproof(bytes(matrix[b][c][0] for b in range(n_blobs)))
         for c in range(n_cols)
     ]
     return matrix, commitments, col_proofs
@@ -742,27 +722,21 @@ async def demo():
     BASE = 9100
 
     da_infos = [
-        NodeInfo(f"da-{j}", "127.0.0.1", BASE + j)
-        for j in range(N_DA)
+        NodeInfo(f"da-{j}", "127.0.0.1", BASE + j) for j in range(N_DA)
     ]
 
     # Assign two columns to each node (round-robin wrap-around).
     # In Ethereum, nodes self-advertise their custody choices.
     custody_map = {
-        f"da-{j}": {j % N_COLS, (j + 1) % N_COLS}
-        for j in range(N_DA)
+        f"da-{j}": {j % N_COLS, (j + 1) % N_COLS} for j in range(N_DA)
     }
 
     registry = SubnetRegistry(da_infos, custody_map)
 
     disperser_info = NodeInfo("disperser", "127.0.0.1", BASE + N_DA)
-    verifier_info = NodeInfo(
-        "verifier", "127.0.0.1", BASE + N_DA + 1
-    )
+    verifier_info = NodeInfo("verifier", "127.0.0.1", BASE + N_DA + 1)
 
-    da_nodes = [
-        DANode(info, custody_map[info.node_id]) for info in da_infos
-    ]
+    da_nodes = [DANode(info, custody_map[info.node_id]) for info in da_infos]
     disperser = Disperser(disperser_info, registry, N_BLOB, N_COLS)
     verifier = Verifier(verifier_info)
 
