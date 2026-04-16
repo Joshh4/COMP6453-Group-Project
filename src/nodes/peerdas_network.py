@@ -24,21 +24,25 @@ Encoding status
       matrix from the raw block data.
 
       Limitation: GF(256) operates on individual bytes, not the
-      large field elements (32 bytes each) that Ethereum's
-      BLS12-381 curve requires.  For a demo / prototype this is
-      fine.  When the full KZG module lands, the field will change
-      but the matrix shape and commitment interface stay the same.
+      large field elements (32 bytes each) that Ethereum's BLS12-381
+      curve requires.  For a demo / prototype this is fine.  When
+      the full KZG module lands, the field will change but the
+      matrix shape and commitment interface stay the same.
 
-  kzg.py  [NOT YET COMMITTED -- stubs remain]
-      _stub_kzg_commit()     returns a SHA-256 hex string instead
-                             of a real KZG commitment.
-      _stub_kzg_multiproof() returns a SHA-256 hex string instead
-                             of a real KZG multiproof.
-      Both are clearly marked with SWAP comments.
+  kzg.py  [INTEGRATED]
+      KZGContext wraps CCfull and exposes three methods used here:
+        commit_matrix()  : commits to each blob row, returns
+                           hex G1 commitments + KZG-evaluated cells
+        open_column()    : builds a per-column KZG multiproof
+        verify_column()  : checks cells against commitments
+
+      The prototype uses D=1 (one field element per cell) to match
+      the GF(256) byte-level RS output.  Switching to the full
+      Ethereum parameters (D=64) only requires changing KZGContext's
+      D argument — the rest of this file is unaffected.
 
   _encode_matrix() is the single call site that ties everything
-  together.  Once kzg.py is committed only that function changes
-  -- the rest of the network layer is unaffected.
+  together.
 
 Three roles
 -----------
@@ -60,16 +64,12 @@ Subnet / committee model
   Here custody_columns is a set[int] given at node creation.
   SubnetRegistry maps col_index -> list[NodeInfo].
 
-Plug-in point for kzg.py
---------------------------
-  Replace _stub_kzg_commit() and _stub_kzg_multiproof() inside
-  _encode_matrix() once kzg.py is committed:
-
-      from src.commitments import kzg
-      # one commitment per blob
-      commitment = kzg.commit(blob_poly)
-      # one multiproof per column (covers all blobs at that col)
-      proof = kzg.multiproof(matrix, col_idx)
+Shared KZG context
+------------------
+  The trusted setup (SRS) must be the same object in the disperser
+  and the verifier.  _get_kzg_ctx() caches one KZGContext per
+  (n_blobs, n_cols) pair for the lifetime of the process.  In a
+  real deployment the SRS would be loaded from a pre-computed file.
 """
 
 import asyncio
@@ -82,14 +82,15 @@ from typing import Optional
 
 # RS encoder (teammate's module -- committed).
 # Import guard: fall back to None so the file is still importable
-# in environments where the module path is not set up yet.
+# in environments where the module path isn't set up yet.
 try:
-    from block import Block
-    from rs import RS
-
+    from src.reedsolomon.block import Block
+    from src.reedsolomon.rs import RS
     _RS_AVAILABLE = True
 except ImportError:
     _RS_AVAILABLE = False
+
+from src.commitments.kzg_context import KZGContext
 
 logging.basicConfig(
     level=logging.INFO,
@@ -102,7 +103,7 @@ logging.basicConfig(
 # =============================================================================
 
 # Total columns in the blob matrix.  128 in Ethereum mainnet.
-N_COLS_DEFAULT = 8  # small value for demo; use 128 for spec
+N_COLS_DEFAULT = 8    # small value for demo; use 128 for spec
 
 # Number of blobs (rows) per block.  Grows over time in Ethereum.
 N_BLOBS_DEFAULT = 4
@@ -146,12 +147,12 @@ class Column:
                   this column across all blobs
     """
 
-    block_id: str
-    col_index: int
-    n_cols: int
-    cells: list  # list[list[int]] -- one cell per blob
-    commitments: list  # list[str] -- one KZG commitment per blob
-    proof: str  # KZG multiproof for this column (hex)
+    block_id:    str
+    col_index:   int
+    n_cols:      int
+    cells:       list  # list[list[int]] -- one cell per blob
+    commitments: list  # list[str]       -- one KZG com per blob
+    proof:       str   # KZG multiproof for this column (hex)
 
 
 @dataclass
@@ -159,8 +160,8 @@ class NodeInfo:
     """Network address of a node."""
 
     node_id: str
-    host: str
-    port: int
+    host:    str
+    port:    int
 
 
 # =============================================================================
@@ -185,7 +186,7 @@ class SubnetRegistry:
 
     def __init__(
         self,
-        node_infos: list,  # list[NodeInfo]
+        node_infos: list,   # list[NodeInfo]
         custody_map: dict,  # node_id -> set[int] of col indices
     ):
         # col_index -> list[NodeInfo]
@@ -251,7 +252,9 @@ class BaseNode:
             self.info.host,
             self.info.port,
         )
-        self.logger.info(f"Listening on {self.info.host}:{self.info.port}")
+        self.logger.info(
+            f"Listening on {self.info.host}:{self.info.port}"
+        )
         async with self._server:
             await self._server.serve_forever()
 
@@ -270,7 +273,7 @@ class BaseNode:
                 raw = await reader.readline()
                 if not raw:
                     break
-                msg = decode_msg(raw)
+                msg      = decode_msg(raw)
                 response = await self.handle_message(msg)
                 if response is not None:
                     writer.write(response)
@@ -307,7 +310,9 @@ class BaseNode:
 
             result = None
             if wait_for_reply:
-                raw = await asyncio.wait_for(reader.readline(), timeout=5.0)
+                raw = await asyncio.wait_for(
+                    reader.readline(), timeout=5.0
+                )
                 if raw:
                     result = decode_msg(raw)
 
@@ -316,7 +321,9 @@ class BaseNode:
             return result
 
         except (ConnectionRefusedError, asyncio.TimeoutError) as e:
-            self.logger.warning(f"Could not reach {target.node_id}: {e}")
+            self.logger.warning(
+                f"Could not reach {target.node_id}: {e}"
+            )
             return None
 
 
@@ -332,8 +339,8 @@ class Disperser(BaseNode):
 
     Steps:
       1. Encode block_data into an n_blobs x n_cols matrix of cells
-         with one KZG commitment per blob and one KZG multiproof
-         per column.  RS encoding is real; KZG is still stubbed.
+         with one KZG commitment per blob and one KZG multiproof per
+         column.  RS encoding is real; KZG uses KZGContext.
       2. For each column, look up its subnet in the registry and
          send the column payload to every node in that subnet.
     """
@@ -343,12 +350,12 @@ class Disperser(BaseNode):
         info: NodeInfo,
         registry: SubnetRegistry,
         n_blobs: int = N_BLOBS_DEFAULT,
-        n_cols: int = N_COLS_DEFAULT,
+        n_cols:  int = N_COLS_DEFAULT,
     ):
         super().__init__(info)
         self.registry = registry
-        self.n_blobs = n_blobs
-        self.n_cols = n_cols
+        self.n_blobs  = n_blobs
+        self.n_cols   = n_cols
 
     async def handle_message(self, msg: dict) -> Optional[bytes]:
         return None  # disperser only sends; it never receives
@@ -373,19 +380,22 @@ class Disperser(BaseNode):
         # If one custodian is offline, others can still serve it.
         tasks = []
         for col_idx in range(self.n_cols):
-            col_cells = [matrix[b][col_idx] for b in range(self.n_blobs)]
+            col_cells = [
+                matrix[b][col_idx] for b in range(self.n_blobs)
+            ]
             payload = {
-                "block_id": block_id,
-                "col_index": col_idx,
-                "n_cols": self.n_cols,
-                "cells": col_cells,
+                "block_id":    block_id,
+                "col_index":   col_idx,
+                "n_cols":      self.n_cols,
+                "cells":       col_cells,
                 "commitments": commitments,
-                "proof": col_proofs[col_idx],
+                "proof":       col_proofs[col_idx],
             }
             subnet = self.registry.nodes_for_column(col_idx)
             if not subnet:
                 self.logger.warning(
-                    f"No nodes custody col {col_idx}" " -- column will be lost"
+                    f"No nodes custody col {col_idx}"
+                    " -- column will be lost"
                 )
             for node in subnet:
                 tasks.append(
@@ -441,44 +451,44 @@ class DANode(BaseNode):
         col_idx = msg["col_index"]
         if col_idx not in self.custody_columns:
             self.logger.warning(
-                f"Received col {col_idx} outside custody" " -- discarding"
+                f"Received col {col_idx} outside custody"
+                " -- discarding"
             )
             return None
 
         col = Column(
-            block_id=msg["block_id"],
-            col_index=col_idx,
-            n_cols=msg["n_cols"],
-            cells=msg["cells"],
-            commitments=msg["commitments"],
-            proof=msg["proof"],
+            block_id=    msg["block_id"],
+            col_index=   col_idx,
+            n_cols=      msg["n_cols"],
+            cells=       msg["cells"],
+            commitments= msg["commitments"],
+            proof=       msg["proof"],
         )
         self.store.setdefault(col.block_id, {})[col_idx] = col
-        self.logger.info(f"Stored col {col_idx} for block {col.block_id}")
+        self.logger.info(
+            f"Stored col {col_idx} for block {col.block_id}"
+        )
         return None
 
     def _handle_sample_req(self, msg: dict) -> bytes:
         """Return the column if we have it, else MSG_UNAVAILABLE."""
         block_id = msg["block_id"]
-        col_idx = msg["col_index"]
-        col = self.store.get(block_id, {}).get(col_idx)
+        col_idx  = msg["col_index"]
+        col      = self.store.get(block_id, {}).get(col_idx)
 
         if col is None:
-            return encode_msg(
-                MSG_UNAVAILABLE,
-                {"block_id": block_id, "col_index": col_idx},
-            )
+            return encode_msg(MSG_UNAVAILABLE, {
+                "block_id":  block_id,
+                "col_index": col_idx,
+            })
 
-        return encode_msg(
-            MSG_SAMPLE_RESP,
-            {
-                "block_id": col.block_id,
-                "col_index": col.col_index,
-                "cells": col.cells,
-                "commitments": col.commitments,
-                "proof": col.proof,
-            },
-        )
+        return encode_msg(MSG_SAMPLE_RESP, {
+            "block_id":    col.block_id,
+            "col_index":   col.col_index,
+            "cells":       col.cells,
+            "commitments": col.commitments,
+            "proof":       col.proof,
+        })
 
 
 # =============================================================================
@@ -517,7 +527,32 @@ class Verifier(BaseNode):
 
 
 # =============================================================================
-# Encoding  (single call site -- swap KZG stubs here when ready)
+# Shared KZG context -- one SRS for the whole process
+# =============================================================================
+
+
+# Cache keyed by (n_blobs, n_cols) so disperser and verifier share
+# the same trusted setup without passing it explicitly.
+# In a real deployment, load the SRS from a ceremony file instead.
+_kzg_ctx_cache: dict = {}
+
+
+def _get_kzg_ctx(n_blobs: int, n_cols: int) -> KZGContext:
+    """
+    Return (and cache) the KZGContext for these parameters.
+
+    The first call generates the SRS (trusted setup) which involves
+    elliptic curve multiplications — expect ~1-5 s for small demo
+    parameters (n_cols=8).  Subsequent calls are instant.
+    """
+    key = (n_blobs, n_cols)
+    if key not in _kzg_ctx_cache:
+        _kzg_ctx_cache[key] = KZGContext(n_blobs, n_cols)
+    return _kzg_ctx_cache[key]
+
+
+# =============================================================================
+# Encoding  (single call site)
 # =============================================================================
 
 
@@ -529,34 +564,21 @@ def _encode_matrix(
     """
     Build the blob matrix, KZG commitments, and KZG multiproofs.
 
-    RS encoding is real (uses teammate's rs.py / block.py).
-    KZG commitment and multiproof are still stubbed (SHA-256 hex)
-    until kzg.py is committed.
-
-    How the RS encoder maps onto PeerDAS:
-      - Split block_data into n_blobs equal blobs.
-      - Each blob is treated as a message of k = n_cols/2 bytes
-        (rate-1/2 code, same as PeerDAS spec).
-      - RS(k, n_cols) expands each blob to n_cols symbols.
-      - Each symbol (one byte in GF(256)) becomes one cell.
-        In the full Ethereum implementation, a cell holds 64
-        BLS12-381 field elements (32 bytes each); the GF(256)
-        field is a prototype stand-in.
-
-    Once kzg.py is committed, replace the two stub calls:
-      # commitment per blob
-      commitments[b] = kzg.commit(blob_polynomial)
-      # multiproof per column (covers all blobs at that column)
-      col_proofs[c]  = kzg.multiproof(matrix, c)
+    RS encoding produces the initial cells (real if rs.py is available,
+    byte-split fallback otherwise).  KZGContext then:
+      1. Commits to the systematic bytes of each blob row.
+      2. Re-evaluates the polynomial at all n_cols domain points to
+         produce KZG-consistent cells (replacing the RS cells so that
+         verify_column() always passes).
+      3. Opens each column to produce one multiproof per column.
 
     Returns: (matrix, commitments, col_proofs)
-      matrix      : list[list[list[int]]]
-      commitments : list[str]  (hex, one per blob)
-      col_proofs  : list[str]  (hex, one per column)
+      matrix      : list[list[list[int]]]  KZG-evaluated cells
+      commitments : list[str]              hex G1, one per blob
+      col_proofs  : list[str]              hex JSON, one per column
     """
     if _RS_AVAILABLE:
         return _rs_encode_matrix(data, n_blobs, n_cols)
-    # Fallback: rs.py not importable in this environment.
     return _byte_split_matrix(data, n_blobs, n_cols)
 
 
@@ -566,17 +588,28 @@ def _rs_encode_matrix(
     n_cols: int,
 ):
     """
-    Real RS encoding using teammate's RS class.
+    RS encode, then layer real KZG commitments and proofs on top.
 
-    Each blob is independently RS-encoded at rate 1/2:
-      k = n_cols // 2  message bytes -> n_cols coded bytes.
-    The n_cols coded bytes become the n_cols cells of that row.
+    RS step (unchanged from original):
+      k = n_cols // 2  message bytes -> n_cols coded bytes per blob.
+
+    KZG step (replaces stubs):
+      KZGContext.commit_matrix() commits to the k systematic bytes
+      and returns KZG-evaluated cells for all n_cols positions.
+      KZGContext.open_column() builds one multiproof per column.
+
+    The returned matrix uses KZG-evaluated cells so that
+    verify_column() is consistent regardless of which column is
+    sampled.  The RS coding step is preserved as a demonstration
+    but its parity bytes are superseded by the KZG evaluations.
 
     Constraint from the RS class: n < 256 (GF(256) field order).
     n_cols must therefore be <= 255.  128 (Ethereum spec) is fine.
     """
     if n_cols >= 256:
-        raise ValueError(f"n_cols must be < 256 for GF(256) RS; got {n_cols}")
+        raise ValueError(
+            f"n_cols must be < 256 for GF(256) RS; got {n_cols}"
+        )
 
     # k = half the columns (rate-1/2 matches PeerDAS spec).
     k = n_cols // 2
@@ -585,42 +618,39 @@ def _rs_encode_matrix(
     # Split raw data evenly across blobs, padding the last one.
     blob_size = max(1, len(data) // n_blobs)
     raw_blobs = [
-        data[b * blob_size : (b + 1) * blob_size] for b in range(n_blobs)
+        data[b * blob_size : (b + 1) * blob_size]
+        for b in range(n_blobs)
     ]
 
-    matrix = []
-    commitments = []
-
-    for raw in raw_blobs:
-        # Pad or truncate blob to exactly k bytes so RS(k, n) works.
-        # Real Ethereum pads at the field-element level; bytes here.
+    # ------------------------------------------------------------------
+    # RS encode each blob to build the initial matrix.
+    # (Kept so teammate's module stays exercised in the demo.)
+    # ------------------------------------------------------------------
+    rs_matrix = []
+    for b, raw in enumerate(raw_blobs):
+        # Pad or truncate blob to exactly k bytes.
         padded = (raw + bytes(k))[:k]
-        block = Block(padded, k)
-        enc = rs.encode(block)
+        block  = Block(padded, k)
+        enc    = rs.encode(block)
+        row    = [[b_val] for b_val in enc.data()]
+        rs_matrix.append(row)
 
-        # Each encoded byte is one cell at this row.
-        # Wrap in a list to match the interface: cell = list[int].
-        row = [[b_val] for b_val in enc.data()]
-        matrix.append(row)
+    # ------------------------------------------------------------------
+    # KZG: commit to systematic cells, evaluate over all columns,
+    #      and produce one multiproof per column.
+    # ------------------------------------------------------------------
+    kzg_ctx = _get_kzg_ctx(n_blobs, n_cols)
 
-        # ------------------------------------------------------------------
-        # SWAP for real KZG once kzg.py is committed:
-        #   from src.commitments import kzg
-        #   commitments.append(kzg.commit(padded))
-        commitments.append(_stub_kzg_commit(padded))
-        # ------------------------------------------------------------------
+    # commit_matrix returns KZG-consistent cells alongside commitments
+    # so that stored cells exactly match what verify_column() expects.
+    commitments, states, kzg_matrix = kzg_ctx.commit_matrix(rs_matrix)
 
-    # Build one multiproof per column (stub for now).
     col_proofs = []
     for c in range(n_cols):
-        col_bytes = bytes(matrix[b][c][0] for b in range(n_blobs))
-        # ------------------------------------------------------------------
-        # SWAP for real KZG once kzg.py is committed:
-        #   col_proofs.append(kzg.multiproof(matrix, c))
-        col_proofs.append(_stub_kzg_multiproof(col_bytes))
-        # ------------------------------------------------------------------
+        _, proof_hex = kzg_ctx.open_column(states, c)
+        col_proofs.append(proof_hex)
 
-    return matrix, commitments, col_proofs
+    return kzg_matrix, commitments, col_proofs
 
 
 def _byte_split_matrix(
@@ -631,74 +661,55 @@ def _byte_split_matrix(
     """
     Fallback when rs.py is not importable.
     Simple byte-split with no real RS redundancy.
+    Also uses real KZG (via _get_kzg_ctx) so verification works.
     Matches the same output shape as _rs_encode_matrix().
     """
+    k     = n_cols // 2
     total = n_blobs * n_cols
     chunk = max(1, len(data) // total)
-    flat = [
+    flat  = [
         [data[i * chunk]] if i * chunk < len(data) else [0]
         for i in range(total)
     ]
 
-    matrix = [
-        [flat[b * n_cols + c] for c in range(n_cols)] for b in range(n_blobs)
-    ]
-
-    commitments = [
-        _stub_kzg_commit(bytes(matrix[b][c][0] for c in range(n_cols)))
+    # Build a simple matrix from raw bytes.
+    raw_matrix = [
+        [flat[b * n_cols + c] for c in range(n_cols)]
         for b in range(n_blobs)
     ]
-    col_proofs = [
-        _stub_kzg_multiproof(bytes(matrix[b][c][0] for b in range(n_blobs)))
-        for c in range(n_cols)
-    ]
-    return matrix, commitments, col_proofs
+
+    # Layer KZG on top, same as the RS path.
+    kzg_ctx = _get_kzg_ctx(n_blobs, n_cols)
+    commitments, states, kzg_matrix = kzg_ctx.commit_matrix(raw_matrix)
+
+    col_proofs = []
+    for c in range(n_cols):
+        _, proof_hex = kzg_ctx.open_column(states, c)
+        col_proofs.append(proof_hex)
+
+    return kzg_matrix, commitments, col_proofs
 
 
 # =============================================================================
-# KZG stubs  [replace when kzg.py is committed]
+# KZG stubs  -- kept for reference / fallback but no longer called
+#              in the main encode path.  Remove once kzg.py is stable.
 # =============================================================================
 
 
 def _stub_kzg_commit(blob_bytes: bytes) -> str:
-    """
-    Stub for kzg.commit(blob_polynomial).
-
-    Returns SHA-256 of the blob bytes as a hex string.
-    Replace with:
-        from src.commitments import kzg
-        return kzg.commit(blob_polynomial)
-    """
     return hashlib.sha256(blob_bytes).hexdigest()
 
 
 def _stub_kzg_multiproof(col_bytes: bytes) -> str:
-    """
-    Stub for kzg.multiproof(matrix, col_idx).
-
-    Returns SHA-256 of the column bytes as a hex string.
-    Replace with:
-        from src.commitments import kzg
-        return kzg.multiproof(matrix, col_idx)
-    """
     return hashlib.sha256(col_bytes).hexdigest()
 
 
 def _stub_kzg_verify(
-    commitments: list,  # list[str] -- one KZG commitment per blob
+    commitments: list,
     col_idx: int,
-    cells: list,  # list[list[int]] -- one cell per blob
-    proof: str,  # KZG multiproof (hex str)
+    cells: list,
+    proof: str,
 ) -> bool:
-    """
-    Stub for kzg.verify_multiproof().
-
-    Always returns True so the demo runs without real KZG.
-    Replace with:
-        from src.commitments import kzg
-        return kzg.verify_multiproof(
-            commitments, col_idx, cells, proof)
-    """
     return True
 
 
@@ -714,34 +725,51 @@ async def demo():
     8 DA nodes each custody 2 columns.  The disperser RS-encodes
     the block (real encoding if rs.py is available, byte-split
     fallback otherwise).  The verifier samples 4 random columns
-    and checks KZG proofs (stubbed -- always passes).
+    and checks real KZG proofs via the shared KZGContext.
+
+    Note: the first call to _get_kzg_ctx() runs the trusted setup
+    (elliptic curve multiplications).  For N_COLS=8 this takes a
+    few seconds in pure Python.
     """
-    N_DA = 8
+    N_DA   = 8
     N_COLS = N_COLS_DEFAULT
     N_BLOB = N_BLOBS_DEFAULT
-    BASE = 9100
+    BASE   = 9100
 
     da_infos = [
-        NodeInfo(f"da-{j}", "127.0.0.1", BASE + j) for j in range(N_DA)
+        NodeInfo(f"da-{j}", "127.0.0.1", BASE + j)
+        for j in range(N_DA)
     ]
 
     # Assign two columns to each node (round-robin wrap-around).
     # In Ethereum, nodes self-advertise their custody choices.
     custody_map = {
-        f"da-{j}": {j % N_COLS, (j + 1) % N_COLS} for j in range(N_DA)
+        f"da-{j}": {j % N_COLS, (j + 1) % N_COLS}
+        for j in range(N_DA)
     }
 
     registry = SubnetRegistry(da_infos, custody_map)
 
-    disperser_info = NodeInfo("disperser", "127.0.0.1", BASE + N_DA)
-    verifier_info = NodeInfo("verifier", "127.0.0.1", BASE + N_DA + 1)
+    disperser_info = NodeInfo(
+        "disperser", "127.0.0.1", BASE + N_DA
+    )
+    verifier_info  = NodeInfo(
+        "verifier", "127.0.0.1", BASE + N_DA + 1
+    )
 
-    da_nodes = [DANode(info, custody_map[info.node_id]) for info in da_infos]
-    disperser = Disperser(disperser_info, registry, N_BLOB, N_COLS)
-    verifier = Verifier(verifier_info)
+    da_nodes  = [
+        DANode(info, custody_map[info.node_id])
+        for info in da_infos
+    ]
+    disperser = Disperser(
+        disperser_info, registry, N_BLOB, N_COLS
+    )
+    verifier  = Verifier(verifier_info)
 
     all_nodes = da_nodes + [disperser, verifier]
-    servers = [asyncio.create_task(n.start()) for n in all_nodes]
+    servers   = [
+        asyncio.create_task(n.start()) for n in all_nodes
+    ]
 
     await asyncio.sleep(0.3)
 
@@ -749,9 +777,13 @@ async def demo():
     print(f"Encoding mode: {enc_label}")
 
     block_data = b"PeerDAS block data demo." * 8
-    block_id = await disperser.disperse(block_data)
+    block_id   = await disperser.disperse(block_data)
 
     await asyncio.sleep(0.2)
+
+    # Retrieve the shared KZGContext that was used during dispersal.
+    # This ensures verify_column() uses the same SRS as commit_matrix().
+    kzg_ctx = _get_kzg_ctx(N_BLOB, N_COLS)
 
     # Sample 4 random columns.  Full sampling logic is in sampler.py;
     # this inline version keeps the demo self-contained.
@@ -763,10 +795,12 @@ async def demo():
         if not subnet:
             print(f"  col {col_idx}: no custodians")
             continue
-        node = random.choice(subnet)
-        resp = await verifier.fetch_column(node, block_id, col_idx)
+        node  = random.choice(subnet)
+        resp  = await verifier.fetch_column(
+            node, block_id, col_idx
+        )
         if resp and resp.get("type") == MSG_SAMPLE_RESP:
-            valid = _stub_kzg_verify(
+            valid = kzg_ctx.verify_column(
                 resp["commitments"],
                 col_idx,
                 resp["cells"],

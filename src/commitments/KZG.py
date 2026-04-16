@@ -39,7 +39,7 @@ import hashlib
 
 from py_ecc.bls12_381 import G1, G2, multiply, add, neg, pairing, Z1
 
-from poly import Poly as Polynomial
+from src.reedsolomon.polynomial import Poly
 
 # Every scalar in this scheme lives in the range 0 to FIELD_PRIME-1
 FIELD_PRIME = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001
@@ -98,10 +98,10 @@ class RootsOfUnity:
         coset_root = self.element(s_hat * r)
         return r, coset_root
 
-    def lagrange_interpolate_coset(self, r: int, s_hat: int, values: list) -> Polynomial:
+    def lagrange_interpolate_coset(self, r: int, s_hat: int, values: list) -> Poly:
         # Build the unique polynomial that hits each value at the r coset points
         points = [self.element(s_hat * r + i) for i in range(r)]
-        return Polynomial.lagrange_interpolate(points, values, self.p)
+        return Poly.lagrange_interpolate(points, values, self.p)
 
     # FFT over Z_p — takes polynomial coefficients, returns evaluations at all
     # domain points in RBO order. O(m log m) using Cooley-Tukey butterflies
@@ -251,7 +251,7 @@ class KZGSetup:
 
 # Compute the KZG commitment to a polynomial: [f(tau)]_1
 # We never know tau — we evaluate f at tau using the SRS points instead
-def _commit_poly(srs: SRS, poly: Polynomial):
+def _commit_poly(srs: SRS, poly: Poly):
     if poly.deg() > srs.max_degree:
         raise ValueError(f"Polynomial degree {poly.deg()} exceeds SRS max {srs.max_degree}")
     result = Z1  # start at the identity (zero) point
@@ -269,10 +269,10 @@ class KZGProver:
         self.domain = domain
         self.D      = D
 
-    def commit(self, poly: Polynomial):
+    def commit(self, poly: Poly):
         return _commit_poly(self.srs, poly)
 
-    def multi_open(self, poly: Polynomial, cell_index: int):
+    def multi_open(self, poly: Poly, cell_index: int):
         # cell_index is 0-based (paper uses 1-based, so subtract 1 when bridging)
         D = self.D
         r, coset_root = self.domain.coset_vanishing(D, cell_index)
@@ -287,12 +287,12 @@ class KZGProver:
         I = self.domain.lagrange_interpolate_coset(D, cell_index, cell_values)
 
         # z(X) = X^D - coset_root is the vanishing polynomial of this cell's coset
-        z = Polynomial([-coset_root % FIELD_PRIME] + [0] * (D - 1) + [1])
+        z = Poly([-coset_root % FIELD_PRIME] + [0] * (D - 1) + [1])
 
         # Q(X) = (f(X) - I(X)) / z(X) — this division is exact because f and I
         # agree on all D coset points, so f - I vanishes there
         f_minus_I = poly - I
-        quotient, remainder = Polynomial.divmod(f_minus_I, z)
+        quotient, remainder = Poly.divmod(f_minus_I, z, FIELD_PRIME)
 
         if any(c % FIELD_PRIME != 0 for c in remainder.coeffs()):
             raise RuntimeError("Non-zero remainder in multi_open — bug in coset setup")
@@ -301,7 +301,7 @@ class KZGProver:
         proof = _commit_poly(self.srs, quotient)
         return cell_values, proof
 
-    def prove_all_cells(self, poly: Polynomial, n_cells: int = N_CELLS_EXT):
+    def prove_all_cells(self, poly: Poly, n_cells: int = N_CELLS_EXT):
         # Naive: compute each cell's proof separately (O(n*d) — use FK for production)
         return [self.multi_open(poly, j) for j in range(n_cells)]
 
@@ -400,11 +400,11 @@ class CCrow:
             f"blob_data must have D*k={self.D * self.k} elements, got {len(blob_data)}"
         )
         points = [self.domain.element(i) for i in range(self.D * self.k)]
-        f = Polynomial.lagrange_interpolate(points, blob_data)
+        f = Poly.lagrange_interpolate(points, blob_data, self.domain.p)
         com = self.prover.commit(f)
         return com, f  # f is the state — keep it for opening cells later
 
-    def open(self, state: Polynomial, cell_index: int):
+    def open(self, state: Poly, cell_index: int):
         return self.prover.multi_open(state, cell_index)
 
     def verify(self, commitment, cell_index: int, cell_values: list, proof) -> bool:
