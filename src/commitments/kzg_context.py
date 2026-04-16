@@ -60,14 +60,14 @@ class KZGContext:
     def __init__(
         self,
         n_blobs: int,
-        n_cols:  int,
-        D:       int = 1,      # 1 field element per cell for the byte prototype
-        srs:     object = None, # pass an existing SRS to share the trusted setup
+        n_cols: int,
+        D: int = 1,  # 1 field element per cell for the byte prototype
+        srs: object = None,  # pass an existing SRS to share the trusted setup
     ):
         self.n_blobs = n_blobs
-        self.n_cols  = n_cols
-        self.D       = D
-        self.k       = n_cols // 2  # systematic cells per blob (rate-1/2)
+        self.n_cols = n_cols
+        self.D = D
+        self.k = n_cols // 2  # systematic cells per blob (rate-1/2)
 
         # Domain size must be a power of 2.
         m = n_cols * D
@@ -82,8 +82,12 @@ class KZGContext:
         self.srs = srs
 
         self.ccfull = CCfull(
-            self.srs, self.domain,
-            ell=n_blobs, D=D, k=self.k, n=n_cols,
+            self.srs,
+            self.domain,
+            ell=n_blobs,
+            D=D,
+            k=self.k,
+            n=n_cols,
         )
 
     # ------------------------------------------------------------------
@@ -110,10 +114,7 @@ class KZGContext:
             so that verify_column() is always consistent.
         """
         # k systematic field elements per blob (D=1, so one int per cell).
-        blobs = [
-            [row[c][0] for c in range(self.k)]
-            for row in rs_matrix
-        ]
+        blobs = [[row[c][0] for c in range(self.k)] for row in rs_matrix]
 
         commitments_g1, states = self.ccfull.commit(blobs)
         commitments_hex = [self._g1_to_hex(c) for c in commitments_g1]
@@ -147,17 +148,17 @@ class KZGContext:
 
     def verify_column(
         self,
-        commitments_hex: list,   # list[str]       -- one per blob
-        col_index:       int,
-        cells:           list,   # list[list[int]] -- one cell per blob
-        proof_hex:       str,    # JSON list of hex G1 proofs
+        commitments_hex: list,  # list[str]       -- one per blob
+        col_index: int,
+        cells: list,  # list[list[int]] -- one cell per blob
+        proof_hex: str,  # JSON list of hex G1 proofs
     ) -> bool:
         """
         Verify that the cells for col_index are consistent with the
         KZG commitments.  Returns True iff every row's proof passes.
         """
         commitments_g1 = [self._hex_to_g1(h) for h in commitments_hex]
-        proofs_g1      = [self._hex_to_g1(h) for h in json.loads(proof_hex)]
+        proofs_g1 = [self._hex_to_g1(h) for h in json.loads(proof_hex)]
         return self.ccfull.verify_column(
             commitments_g1, col_index, cells, proofs_g1
         )
@@ -169,7 +170,7 @@ class KZGContext:
     @staticmethod
     def _g1_to_hex(point) -> str:
         """Serialise a py_ecc G1 affine point to a JSON-safe string."""
-        if point is None:   # py_ecc represents infinity as None
+        if point is None:  # py_ecc represents infinity as None
             return "inf"
         try:
             x, y = point
@@ -183,5 +184,5 @@ class KZGContext:
         if h == "inf":
             return Z1
         xh, yh = h.split(":")
-        FQ_cls = type(G1[0])   # avoids a fragile direct import of FQ
+        FQ_cls = type(G1[0])  # avoids a fragile direct import of FQ
         return (FQ_cls(int(xh, 16)), FQ_cls(int(yh, 16)))

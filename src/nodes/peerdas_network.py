@@ -86,6 +86,7 @@ from typing import Optional
 try:
     from src.reedsolomon.block import Block
     from src.reedsolomon.rs import RS
+
     _RS_AVAILABLE = True
 except ImportError:
     _RS_AVAILABLE = False
@@ -103,7 +104,7 @@ logging.basicConfig(
 # =============================================================================
 
 # Total columns in the blob matrix.  128 in Ethereum mainnet.
-N_COLS_DEFAULT = 8    # small value for demo; use 128 for spec
+N_COLS_DEFAULT = 8  # small value for demo; use 128 for spec
 
 # Number of blobs (rows) per block.  Grows over time in Ethereum.
 N_BLOBS_DEFAULT = 4
@@ -147,12 +148,12 @@ class Column:
                   this column across all blobs
     """
 
-    block_id:    str
-    col_index:   int
-    n_cols:      int
-    cells:       list  # list[list[int]] -- one cell per blob
+    block_id: str
+    col_index: int
+    n_cols: int
+    cells: list  # list[list[int]] -- one cell per blob
     commitments: list  # list[str]       -- one KZG com per blob
-    proof:       str   # KZG multiproof for this column (hex)
+    proof: str  # KZG multiproof for this column (hex)
 
 
 @dataclass
@@ -160,8 +161,8 @@ class NodeInfo:
     """Network address of a node."""
 
     node_id: str
-    host:    str
-    port:    int
+    host: str
+    port: int
 
 
 # =============================================================================
@@ -186,7 +187,7 @@ class SubnetRegistry:
 
     def __init__(
         self,
-        node_infos: list,   # list[NodeInfo]
+        node_infos: list,  # list[NodeInfo]
         custody_map: dict,  # node_id -> set[int] of col indices
     ):
         # col_index -> list[NodeInfo]
@@ -252,9 +253,7 @@ class BaseNode:
             self.info.host,
             self.info.port,
         )
-        self.logger.info(
-            f"Listening on {self.info.host}:{self.info.port}"
-        )
+        self.logger.info(f"Listening on {self.info.host}:{self.info.port}")
         async with self._server:
             await self._server.serve_forever()
 
@@ -273,7 +272,7 @@ class BaseNode:
                 raw = await reader.readline()
                 if not raw:
                     break
-                msg      = decode_msg(raw)
+                msg = decode_msg(raw)
                 response = await self.handle_message(msg)
                 if response is not None:
                     writer.write(response)
@@ -310,9 +309,7 @@ class BaseNode:
 
             result = None
             if wait_for_reply:
-                raw = await asyncio.wait_for(
-                    reader.readline(), timeout=5.0
-                )
+                raw = await asyncio.wait_for(reader.readline(), timeout=5.0)
                 if raw:
                     result = decode_msg(raw)
 
@@ -321,9 +318,7 @@ class BaseNode:
             return result
 
         except (ConnectionRefusedError, asyncio.TimeoutError) as e:
-            self.logger.warning(
-                f"Could not reach {target.node_id}: {e}"
-            )
+            self.logger.warning(f"Could not reach {target.node_id}: {e}")
             return None
 
 
@@ -350,12 +345,12 @@ class Disperser(BaseNode):
         info: NodeInfo,
         registry: SubnetRegistry,
         n_blobs: int = N_BLOBS_DEFAULT,
-        n_cols:  int = N_COLS_DEFAULT,
+        n_cols: int = N_COLS_DEFAULT,
     ):
         super().__init__(info)
         self.registry = registry
-        self.n_blobs  = n_blobs
-        self.n_cols   = n_cols
+        self.n_blobs = n_blobs
+        self.n_cols = n_cols
 
     async def handle_message(self, msg: dict) -> Optional[bytes]:
         return None  # disperser only sends; it never receives
@@ -380,22 +375,19 @@ class Disperser(BaseNode):
         # If one custodian is offline, others can still serve it.
         tasks = []
         for col_idx in range(self.n_cols):
-            col_cells = [
-                matrix[b][col_idx] for b in range(self.n_blobs)
-            ]
+            col_cells = [matrix[b][col_idx] for b in range(self.n_blobs)]
             payload = {
-                "block_id":    block_id,
-                "col_index":   col_idx,
-                "n_cols":      self.n_cols,
-                "cells":       col_cells,
+                "block_id": block_id,
+                "col_index": col_idx,
+                "n_cols": self.n_cols,
+                "cells": col_cells,
                 "commitments": commitments,
-                "proof":       col_proofs[col_idx],
+                "proof": col_proofs[col_idx],
             }
             subnet = self.registry.nodes_for_column(col_idx)
             if not subnet:
                 self.logger.warning(
-                    f"No nodes custody col {col_idx}"
-                    " -- column will be lost"
+                    f"No nodes custody col {col_idx}" " -- column will be lost"
                 )
             for node in subnet:
                 tasks.append(
@@ -451,44 +443,47 @@ class DANode(BaseNode):
         col_idx = msg["col_index"]
         if col_idx not in self.custody_columns:
             self.logger.warning(
-                f"Received col {col_idx} outside custody"
-                " -- discarding"
+                f"Received col {col_idx} outside custody" " -- discarding"
             )
             return None
 
         col = Column(
-            block_id=    msg["block_id"],
-            col_index=   col_idx,
-            n_cols=      msg["n_cols"],
-            cells=       msg["cells"],
-            commitments= msg["commitments"],
-            proof=       msg["proof"],
+            block_id=msg["block_id"],
+            col_index=col_idx,
+            n_cols=msg["n_cols"],
+            cells=msg["cells"],
+            commitments=msg["commitments"],
+            proof=msg["proof"],
         )
         self.store.setdefault(col.block_id, {})[col_idx] = col
-        self.logger.info(
-            f"Stored col {col_idx} for block {col.block_id}"
-        )
+        self.logger.info(f"Stored col {col_idx} for block {col.block_id}")
         return None
 
     def _handle_sample_req(self, msg: dict) -> bytes:
         """Return the column if we have it, else MSG_UNAVAILABLE."""
         block_id = msg["block_id"]
-        col_idx  = msg["col_index"]
-        col      = self.store.get(block_id, {}).get(col_idx)
+        col_idx = msg["col_index"]
+        col = self.store.get(block_id, {}).get(col_idx)
 
         if col is None:
-            return encode_msg(MSG_UNAVAILABLE, {
-                "block_id":  block_id,
-                "col_index": col_idx,
-            })
+            return encode_msg(
+                MSG_UNAVAILABLE,
+                {
+                    "block_id": block_id,
+                    "col_index": col_idx,
+                },
+            )
 
-        return encode_msg(MSG_SAMPLE_RESP, {
-            "block_id":    col.block_id,
-            "col_index":   col.col_index,
-            "cells":       col.cells,
-            "commitments": col.commitments,
-            "proof":       col.proof,
-        })
+        return encode_msg(
+            MSG_SAMPLE_RESP,
+            {
+                "block_id": col.block_id,
+                "col_index": col.col_index,
+                "cells": col.cells,
+                "commitments": col.commitments,
+                "proof": col.proof,
+            },
+        )
 
 
 # =============================================================================
@@ -607,9 +602,7 @@ def _rs_encode_matrix(
     n_cols must therefore be <= 255.  128 (Ethereum spec) is fine.
     """
     if n_cols >= 256:
-        raise ValueError(
-            f"n_cols must be < 256 for GF(256) RS; got {n_cols}"
-        )
+        raise ValueError(f"n_cols must be < 256 for GF(256) RS; got {n_cols}")
 
     # k = half the columns (rate-1/2 matches PeerDAS spec).
     k = n_cols // 2
@@ -618,8 +611,7 @@ def _rs_encode_matrix(
     # Split raw data evenly across blobs, padding the last one.
     blob_size = max(1, len(data) // n_blobs)
     raw_blobs = [
-        data[b * blob_size : (b + 1) * blob_size]
-        for b in range(n_blobs)
+        data[b * blob_size : (b + 1) * blob_size] for b in range(n_blobs)
     ]
 
     # ------------------------------------------------------------------
@@ -630,9 +622,9 @@ def _rs_encode_matrix(
     for b, raw in enumerate(raw_blobs):
         # Pad or truncate blob to exactly k bytes.
         padded = (raw + bytes(k))[:k]
-        block  = Block(padded, k)
-        enc    = rs.encode(block)
-        row    = [[b_val] for b_val in enc.data()]
+        block = Block(padded, k)
+        enc = rs.encode(block)
+        row = [[b_val] for b_val in enc.data()]
         rs_matrix.append(row)
 
     # ------------------------------------------------------------------
@@ -664,18 +656,17 @@ def _byte_split_matrix(
     Also uses real KZG (via _get_kzg_ctx) so verification works.
     Matches the same output shape as _rs_encode_matrix().
     """
-    k     = n_cols // 2
+    k = n_cols // 2
     total = n_blobs * n_cols
     chunk = max(1, len(data) // total)
-    flat  = [
+    flat = [
         [data[i * chunk]] if i * chunk < len(data) else [0]
         for i in range(total)
     ]
 
     # Build a simple matrix from raw bytes.
     raw_matrix = [
-        [flat[b * n_cols + c] for c in range(n_cols)]
-        for b in range(n_blobs)
+        [flat[b * n_cols + c] for c in range(n_cols)] for b in range(n_blobs)
     ]
 
     # Layer KZG on top, same as the RS path.
@@ -731,45 +722,32 @@ async def demo():
     (elliptic curve multiplications).  For N_COLS=8 this takes a
     few seconds in pure Python.
     """
-    N_DA   = 8
+    N_DA = 8
     N_COLS = N_COLS_DEFAULT
     N_BLOB = N_BLOBS_DEFAULT
-    BASE   = 9100
+    BASE = 9100
 
     da_infos = [
-        NodeInfo(f"da-{j}", "127.0.0.1", BASE + j)
-        for j in range(N_DA)
+        NodeInfo(f"da-{j}", "127.0.0.1", BASE + j) for j in range(N_DA)
     ]
 
     # Assign two columns to each node (round-robin wrap-around).
     # In Ethereum, nodes self-advertise their custody choices.
     custody_map = {
-        f"da-{j}": {j % N_COLS, (j + 1) % N_COLS}
-        for j in range(N_DA)
+        f"da-{j}": {j % N_COLS, (j + 1) % N_COLS} for j in range(N_DA)
     }
 
     registry = SubnetRegistry(da_infos, custody_map)
 
-    disperser_info = NodeInfo(
-        "disperser", "127.0.0.1", BASE + N_DA
-    )
-    verifier_info  = NodeInfo(
-        "verifier", "127.0.0.1", BASE + N_DA + 1
-    )
+    disperser_info = NodeInfo("disperser", "127.0.0.1", BASE + N_DA)
+    verifier_info = NodeInfo("verifier", "127.0.0.1", BASE + N_DA + 1)
 
-    da_nodes  = [
-        DANode(info, custody_map[info.node_id])
-        for info in da_infos
-    ]
-    disperser = Disperser(
-        disperser_info, registry, N_BLOB, N_COLS
-    )
-    verifier  = Verifier(verifier_info)
+    da_nodes = [DANode(info, custody_map[info.node_id]) for info in da_infos]
+    disperser = Disperser(disperser_info, registry, N_BLOB, N_COLS)
+    verifier = Verifier(verifier_info)
 
     all_nodes = da_nodes + [disperser, verifier]
-    servers   = [
-        asyncio.create_task(n.start()) for n in all_nodes
-    ]
+    servers = [asyncio.create_task(n.start()) for n in all_nodes]
 
     await asyncio.sleep(0.3)
 
@@ -777,7 +755,7 @@ async def demo():
     print(f"Encoding mode: {enc_label}")
 
     block_data = b"PeerDAS block data demo." * 8
-    block_id   = await disperser.disperse(block_data)
+    block_id = await disperser.disperse(block_data)
 
     await asyncio.sleep(0.2)
 
@@ -795,10 +773,8 @@ async def demo():
         if not subnet:
             print(f"  col {col_idx}: no custodians")
             continue
-        node  = random.choice(subnet)
-        resp  = await verifier.fetch_column(
-            node, block_id, col_idx
-        )
+        node = random.choice(subnet)
+        resp = await verifier.fetch_column(node, block_id, col_idx)
         if resp and resp.get("type") == MSG_SAMPLE_RESP:
             valid = kzg_ctx.verify_column(
                 resp["commitments"],
