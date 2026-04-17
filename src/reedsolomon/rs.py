@@ -1,5 +1,5 @@
 import galois
-from block import Block
+from src.reedsolomon.block import Block
 
 """
 	Reed Solomon encoding class.
