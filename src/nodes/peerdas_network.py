@@ -656,7 +656,7 @@ def _byte_split_matrix(
     Also uses real KZG (via _get_kzg_ctx) so verification works.
     Matches the same output shape as _rs_encode_matrix().
     """
-    k = n_cols // 2
+    # k = n_cols // 2
     total = n_blobs * n_cols
     chunk = max(1, len(data) // total)
     flat = [

@@ -1,3 +1,4 @@
+import galois
 from block import Block
 
 """
@@ -29,7 +30,8 @@ class RS:
 
         if n >= field_order:
             raise ValueError(
-                f"n must be less than the field order; n={n}, field_order={field_order}"
+                f"n must be less than the field order; "
+                f"n={n}, field_order={field_order}"
             )
 
         self.k = k
@@ -60,7 +62,7 @@ class RS:
 
 		Parameters:
 			block: block to be encoded
-		
+
 		Returns:
 			encoded block
 	"""
@@ -68,7 +70,8 @@ class RS:
     def encode(self, block: Block) -> Block:
         if len(block) != self.k:
             raise ValueError(
-                f"Block size does not match k; len(block)={len(block)}, k={self.k}"
+                f"Block size does not match k; "
+                f"len(block)={len(block)}, k={self.k}"
             )
 
         # interpret the bytes as elements of the field GF(256)
@@ -99,7 +102,8 @@ class RS:
     def decode(self, block: Block) -> Block:
         if len(block) < self.k:
             raise ValueError(
-                f"block length must be larger than k; len(block)={len(block)}, k={self.k}"
+                f"block length must be larger than k; "
+                f"len(block)={len(block)}, k={self.k}"
             )
 
         k_inputs = self.gf(self.eval_points[: self.k])

@@ -17,10 +17,9 @@ from py_ecc.bls12_381 import G1, Z1
 
 from src.commitments.KZG import (
     FIELD_PRIME,
-    D_CELL_SIZE,
+    CCfull,
     KZGSetup,
     RootsOfUnity,
-    CCfull,
 )
 
 
