@@ -37,10 +37,10 @@
 #       recovered = reconstruct_extended_blob(domain,
 #       {cell_index: cell_values, ...})
 
-import secrets
 import hashlib
+import secrets
 
-from py_ecc.bls12_381 import G1, G2, multiply, add, neg, pairing, Z1
+from py_ecc.bls12_381 import G1, G2, Z1, add, multiply, neg, pairing
 
 from src.reedsolomon.polynomial import Poly
 
@@ -350,9 +350,11 @@ class KZGVerifier:
         D = self.D
         r, coset_root = self.domain.coset_vanishing(D, cell_index)
 
-        # Rebuild I(X) from the claimed cell values
-        I = self.domain.lagrange_interpolate_coset(D, cell_index, cell_values)
-        I_tau_g1 = _commit_poly(self.srs, I)  # [I(tau)]_1
+        # Rebuild interpolant(X) from the claimed cell values
+        interpolant = self.domain.lagrange_interpolate_coset(
+            D, cell_index, cell_values
+        )
+        I_tau_g1 = _commit_poly(self.srs, interpolant)  # [I(tau)]_1
 
         # [com - I(tau)]_1
         lhs_g1 = add(commitment, neg(I_tau_g1))

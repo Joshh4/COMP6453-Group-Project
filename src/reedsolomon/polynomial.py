@@ -1,6 +1,5 @@
 from itertools import zip_longest
 
-
 """
 	For coefficients (a_0, ..., a_n),
 	interpret this as
@@ -128,7 +127,8 @@ class Poly:
 
         for i in reversed(range(g.deg(), f.deg() + 1)):
             if p is not None:
-                # modular inverse of leading coefficient via Fermat's little theorem
+                # modular inverse of leading coefficient via Fermat's 
+                # little theorem
                 g_lead = int(g._coeffs[g.deg()]) % p
                 coeff = int(r[i]) * pow(g_lead, p - 2, p) % p
             else:
@@ -150,7 +150,8 @@ class Poly:
         f(points[i]) == values[i] for all i.
 
         p: if given, all arithmetic is done mod p (required for KZG).
-           p must be prime (used for modular inverse via Fermat's little theorem).
+           p must be prime (used for modular inverse via Fermat's 
+           little theorem).
         """
         n = len(points)
         assert len(values) == n, (
