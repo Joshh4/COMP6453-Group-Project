@@ -1,78 +1,76 @@
 """
-	Block class that encapsulates a raw data string and data length
+Block class that encapsulates a raw data string and data length
 
-	This class acts as the input to Reed Solomon.
+This class acts as the input to Reed Solomon.
 """
+
+
 class Block:
-	"""
-		Init block class
+    """
+    Init block class
 
-		Parameters:
-			data: byte array to be held by the block
-			block_len: intended length of the block, must be greater
-				than len(data), will be padded with 0s to obtain
-				this length
-			underlying_len: length of the data prior to padding or
-				encoding
-			encoded: flag to indicate whether the block represents
-				encoded or raw data
-	"""
-	def __init__(
-		self,
-		data: bytes,
-		block_len: int,
-		underlying_len: int = 0,
-		encoded: bool = False,
-	):
-		if len(data) < underlying_len:
-			raise ValueError(
-				f'underlying_len must be at most len(data); '
-				f'len(data)={len(data)}, '
-				f'underlying_len={underlying_len}'
-			)
+    Parameters:
+            data: byte array to be held by the block
+            block_len: intended length of the block, must be greater
+                    than len(data), will be padded with 0s to obtain
+                    this length
+            underlying_len: length of the data prior to padding or
+                    encoding
+            encoded: flag to indicate whether the block represents
+                    encoded or raw data
+    """
 
-		if block_len < 1:
-			raise ValueError(
-				f'block_len must be a positive integer; '
-				f'block_len={block_len}'
-			)
+    def __init__(
+        self,
+        data: bytes,
+        block_len: int,
+        underlying_len: int = 0,
+        encoded: bool = False,
+    ):
+        if len(data) < underlying_len:
+            raise ValueError(
+                f"underlying_len must be at most len(data); "
+                f"len(data)={len(data)}, "
+                f"underlying_len={underlying_len}"
+            )
 
-		if block_len < len(data):
-			raise ValueError(
-				f'block_len must be greater than len(data); '
-				f'block_len={block_len}, len(data)={len(data)}'
-			)
+        if block_len < 1:
+            raise ValueError(
+                f"block_len must be a positive integer; "
+                f"block_len={block_len}"
+            )
 
-		self._data = data + bytes(block_len - len(data))
-		self._underlying_len = (
-			len(data) if underlying_len <= 0 else underlying_len
-		)
-		self._encoded = encoded
+        if block_len < len(data):
+            raise ValueError(
+                f"block_len must be greater than len(data); "
+                f"block_len={block_len}, len(data)={len(data)}"
+            )
 
-	"""
+        self._data = data + bytes(block_len - len(data))
+        self._underlying_len = (
+            len(data) if underlying_len <= 0 else underlying_len
+        )
+        self._encoded = encoded
+
+    """
 		Return the length of the data.
 	"""
-	def __len__(self):
-		return len(self._data)
 
-	def __str__(self):
-		return (
-			f'data={self._data}, '
-			f'_underlying_len={self._underlying_len}'
-		)
+    def __len__(self):
+        return len(self._data)
 
-	def __repr__(self):
-		return self.__str__()
+    def __str__(self):
+        return f"data={self._data}, " f"_underlying_len={self._underlying_len}"
 
-	def __eq__(self, other):
-		if isinstance(other, Block):
-			return (
-				self._data == other.data
-				and self.length == other.length
-			)
-		return NotImplemented
+    def __repr__(self):
+        return self.__str__()
 
-	"""
+    def __eq__(self, other):
+        if isinstance(other, Block):
+            return self._data == other.data and self.length == other.length
+        return NotImplemented
+
+    """
 		Extract the underlying data of the block.
 
 		Cases:
@@ -84,15 +82,16 @@ class Block:
 		Returns:
 			data in bytes
 	"""
-	def data(self) -> bytes:
-		if self._encoded:
-			return self._data
-		return self._data[:self._underlying_len]
 
-	def underlying_len(self) -> int:
-		return self._underlying_len
+    def data(self) -> bytes:
+        if self._encoded:
+            return self._data
+        return self._data[: self._underlying_len]
 
-	"""
+    def underlying_len(self) -> int:
+        return self._underlying_len
+
+    """
 		Helper function to transform a stream of data into a
 		tuple of blocks
 
@@ -103,21 +102,22 @@ class Block:
 			A tuple of blocks, only the final block in the tuple
 			will have padding
 	"""
-	@staticmethod
-	def create_block_list(data: bytes, block_len: int):
-		if block_len < 1:
-			raise ValueError(
-				f'block_len must be a positive integer; '
-				f'block_len={block_len}'
-			)
 
-		block_arr = []
+    @staticmethod
+    def create_block_list(data: bytes, block_len: int):
+        if block_len < 1:
+            raise ValueError(
+                f"block_len must be a positive integer; "
+                f"block_len={block_len}"
+            )
 
-		i = 0
-		while i < len(data):
-			sub_data = data[i: min(i + block_len, len(data))]
-			b = Block(sub_data, block_len)
-			block_arr.append(b)
-			i += block_len
+        block_arr = []
 
-		return tuple(block_arr)
+        i = 0
+        while i < len(data):
+            sub_data = data[i : min(i + block_len, len(data))]
+            b = Block(sub_data, block_len)
+            block_arr.append(b)
+            i += block_len
+
+        return tuple(block_arr)
