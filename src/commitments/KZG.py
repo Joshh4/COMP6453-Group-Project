@@ -13,7 +13,8 @@
 # 3. To commit to a single blob (one row):
 #
 #       ccrow = CCrow(srs, domain)
-#       commitment, state = ccrow.commit(blob_data)   # blob_data is a list of D*k field elements
+#       commitment, state = ccrow.commit(blob_data)   # blob_data is a list 
+#       of D*k field elements
 #
 # 4. To open a cell (prove what the values are at column j):
 #
@@ -28,11 +29,13 @@
 #       ccfull = CCfull(srs, domain, ell=num_blobs)
 #       commitments, states = ccfull.commit([blob1, blob2, ...])
 #       cells, proofs = ccfull.open(states, col_index)
-#       ok = ccfull.batch_verify(commitments, col_indices, row_indices, cells, proofs)
+#       ok = ccfull.batch_verify(commitments, col_indices, 
+#       row_indices, cells, proofs)
 #
 # 7. If some cells are missing and you want to recover them:
 #
-#       recovered = reconstruct_extended_blob(domain, {cell_index: cell_values, ...})
+#       recovered = reconstruct_extended_blob(domain, 
+#       {cell_index: cell_values, ...})
 
 import secrets
 import hashlib
@@ -74,7 +77,8 @@ class RootsOfUnity:
         self.m = m
         self.p = p
 
-        # Build the natural list: _natural[i] = omega^i, starting at omega^0 = 1
+        # Build the natural list: _natural[i] = omega^i, 
+        # starting at omega^0 = 1
         self._natural = []
         cur = 1
         for _ in range(m):
@@ -103,7 +107,8 @@ class RootsOfUnity:
     def lagrange_interpolate_coset(
         self, r: int, s_hat: int, values: list
     ) -> Poly:
-        # Build the unique polynomial that hits each value at the r coset points
+        # Build the unique polynomial that hits each value at the r 
+        # coset points
         points = [self.element(s_hat * r + i) for i in range(r)]
         return Poly.lagrange_interpolate(points, values, self.p)
 
@@ -293,7 +298,8 @@ class KZGProver:
         return _commit_poly(self.srs, poly)
 
     def multi_open(self, poly: Poly, cell_index: int):
-        # cell_index is 0-based (paper uses 1-based, so subtract 1 when bridging)
+        # cell_index is 0-based (paper uses 1-based, 
+        # so subtract 1 when bridging)
         D = self.D
         r, coset_root = self.domain.coset_vanishing(D, cell_index)
 
@@ -303,14 +309,15 @@ class KZGProver:
         ]
 
         # Build I(X): the unique polynomial that matches f at those D points
-        I = self.domain.lagrange_interpolate_coset(D, cell_index, cell_values)
+        I = self.domain.lagrange_interpolate_coset(D, cell_index, cell_values) #noqa (ignore ruff variable rules)
 
-        # z(X) = X^D - coset_root is the vanishing polynomial of this cell's coset
+        # z(X) = X^D - coset_root is the vanishing polynomial of this 
+        # cell's coset
         z = Poly([-coset_root % FIELD_PRIME] + [0] * (D - 1) + [1])
 
         # Q(X) = (f(X) - I(X)) / z(X) — this division is exact because f and I
         # agree on all D coset points, so f - I vanishes there
-        f_minus_I = poly - I
+        f_minus_I = poly - I #noqa (ignore ruff variable rules)
         quotient, remainder = Poly.divmod(f_minus_I, z, FIELD_PRIME)
 
         if any(c % FIELD_PRIME != 0 for c in remainder.coeffs()):
@@ -323,11 +330,13 @@ class KZGProver:
         return cell_values, proof
 
     def prove_all_cells(self, poly: Poly, n_cells: int = N_CELLS_EXT):
-        # Naive: compute each cell's proof separately (O(n*d) — use FK for production)
+        # Naive: compute each cell's proof separately 
+        # (O(n*d) — use FK for production)
         return [self.multi_open(poly, j) for j in range(n_cells)]
 
 
-# KZGVerifier checks that a set of cell values really came from the committed polynomial
+# KZGVerifier checks that a set of cell values really came 
+# from the committed polynomial
 class KZGVerifier:
     def __init__(self, srs: SRS, domain: RootsOfUnity, D: int = D_CELL_SIZE):
         self.srs = srs
@@ -352,7 +361,8 @@ class KZGVerifier:
         z_tau_g2 = add(self.srs.g2_tauD, neg(g2_mul(coset_root)))
 
         # Pairing check: e(com - [I(tau)]_1, [1]_2) == e(proof, [z(tau)]_2)
-        # This works because if the proof is honest then com - [I(tau)]_1 = [Q(tau)*z(tau)]_1
+        # This works because if the proof is honest then 
+        # com - [I(tau)]_1 = [Q(tau)*z(tau)]_1
         lhs = pairing(G2, lhs_g1)
         rhs = pairing(z_tau_g2, proof)
         return lhs == rhs
@@ -391,7 +401,8 @@ class KZGVerifier:
             lhs_sum = add(lhs_sum, multiply(pi, r_power))
             r_power = r_power * r % FIELD_PRIME
 
-        # RHS accumulator: sum of r^k * (com_ik - [I_k(tau)]_1 + coset_root_k * proof_k)
+        # RHS accumulator: sum of r^k * 
+        # (com_ik - [I_k(tau)]_1 + coset_root_k * proof_k)
         rhs_sum = Z1
         r_power = 1
         for ik, jk, cell, pi in zip(row_indices, cell_indices, cells, proofs):
@@ -435,7 +446,7 @@ class CCrow:
         # each blob element at the corresponding domain point
         assert (
             len(blob_data) == self.D * self.k
-        ), f"blob_data must have D*k={self.D * self.k} elements, got {len(blob_data)}"
+        ), f"blob_data must have D*k={self.D * self.k} elements, got {len(blob_data)}" # noqa (ignore ruff line length)
         points = [self.domain.element(i) for i in range(self.D * self.k)]
         f = Poly.lagrange_interpolate(points, blob_data, self.domain.p)
         com = self.prover.commit(f)
@@ -452,7 +463,8 @@ class CCrow:
         )
 
 
-# reconstruct_extended_blob recovers all n*D evaluations when some cells are missing
+# reconstruct_extended_blob recovers all n*D evaluations when 
+# some cells are missing
 # You need at least k cells (half the extended blob) to reconstruct
 def reconstruct_extended_blob(
     domain: RootsOfUnity,
@@ -549,7 +561,8 @@ class CCfull:
         return commitments, states
 
     def open(self, states: list, col_index: int):
-        # Open the same column across every row, producing ell cell+proof pairs
+        # Open the same column across every row, producing ell 
+        # cell+proof pairs
         cells, proofs = [], []
         for st in states:
             cv, pf = self.ccrow.open(st, col_index)
@@ -575,7 +588,8 @@ class CCfull:
         cells: list,
         proofs: list,
     ) -> bool:
-        # Check any subset of (row, col) cell openings using only 2 pairings total
+        # Check any subset of (row, col) cell openings using only 2 
+        # pairings total
         return self.verifier.batch_verify(
             commitments, col_indices, row_indices, cells, proofs
         )
