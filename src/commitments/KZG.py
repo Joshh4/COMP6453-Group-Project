@@ -40,6 +40,15 @@
 import hashlib
 import secrets
 
+import py_ecc.fields.field_elements as _py_ecc_fe
+import py_ecc.fields.optimized_field_elements as _py_ecc_ofe
+
+# py_ecc's default FQ/FQP.__pow__ is recursive; BLS12-381 final exponentiation
+# in pairing() needs ~4300+ stack frames and blows RecursionError on Windows.
+# optimized_field_elements provides the same math with an iterative __pow__.
+_py_ecc_fe.FQ.__pow__ = _py_ecc_ofe.FQ.__pow__
+_py_ecc_fe.FQP.__pow__ = _py_ecc_ofe.FQP.__pow__
+
 from py_ecc.bls12_381 import G1, G2, Z1, add, multiply, neg, pairing
 
 from src.reedsolomon.polynomial import Poly
