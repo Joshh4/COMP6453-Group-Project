@@ -1,4 +1,5 @@
 import galois
+
 from src.reedsolomon.block import Block
 
 """

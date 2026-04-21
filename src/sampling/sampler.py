@@ -45,11 +45,9 @@ from dataclasses import dataclass
 
 from src.nodes.peerdas_network import (
     MSG_SAMPLE_RESP,
-    NodeInfo,
     SubnetRegistry,
     Verifier,
 )
-
 
 # =============================================================================
 # Result types
