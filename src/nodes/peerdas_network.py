@@ -25,9 +25,9 @@ import random
 from dataclasses import dataclass
 from typing import Optional
 
+from src.commitments.kzg_context import KZGContext
 from src.reedsolomon.block import Block
 from src.reedsolomon.rs import RS
-from src.commitments.kzg_context import KZGContext
 
 logging.basicConfig(
     level=logging.INFO,
