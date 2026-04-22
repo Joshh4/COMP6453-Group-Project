@@ -36,7 +36,6 @@ from src.nodes.peerdas_network import (
     Verifier,
 )
 
-
 # =============================================================================
 # Result types
 # =============================================================================
@@ -166,8 +165,8 @@ class Sampler:
         results: list[ColumnResult] = await asyncio.gather(*tasks)
 
         verified = sum(1 for r in results if r.verified)
-        failed   = sum(1 for r in results if r.responded and not r.verified)
-        no_resp  = sum(1 for r in results if not r.responded)
+        failed = sum(1 for r in results if r.responded and not r.verified)
+        no_resp = sum(1 for r in results if not r.responded)
         required = int(len(cols) * self.threshold)
         available = verified >= required
 
