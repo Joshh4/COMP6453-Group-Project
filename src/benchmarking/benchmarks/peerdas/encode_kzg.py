@@ -24,8 +24,8 @@ def benchmark_encode_kzg(
     """
     Time ``_encode_matrix`` after a one-call warmup per (n_blobs, n_cols).
 
-    Warmup covers KZG SRS setup in ``_get_kzg_ctx`` so averages reflect steady-state
-    encode cost for fixed geometry.
+    Warmup covers KZG SRS setup in ``_get_kzg_ctx`` so averages
+    reflect steady-state encode cost for fixed geometry.
     """
     logger = CSVLogger(
         benchmark_csv("peerdas_encode_kzg.csv"),

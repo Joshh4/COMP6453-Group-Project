@@ -1,1 +1,4 @@
-"""Benchmark drivers and shared utilities (CSV logging, timers, block payloads)."""
+"""Benchmark drivers and shared utilities.
+
+Includes CSV logging, timers, and block payload helpers.
+"""

@@ -22,7 +22,10 @@ def batched_pairing_count() -> int:
 
 
 def benchmark_pairing_counts(ell: int, l_values: list[int]) -> None:
-    """Write naive vs batched pairing counts for each ``L`` (columns / openings)."""
+    """Write naive vs batched pairing counts for each ``L``.
+
+    Here, ``L`` is the number of sampled columns/openings.
+    """
     logger = CSVLogger(
         benchmark_csv("peerdas_pairing_counts.csv"),
         fieldnames=["ell", "L", "naive_pairings", "batched_pairings"],

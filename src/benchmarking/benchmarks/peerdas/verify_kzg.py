@@ -1,7 +1,8 @@
 """
 PeerDAS KZG column verification benchmark on ``_encode_matrix`` outputs.
 
-Uses ``peerdas_network._encode_matrix``, ``_get_kzg_ctx``, and ``KZGContext.verify_column``.
+Uses ``peerdas_network._encode_matrix``, ``_get_kzg_ctx``,
+and ``KZGContext.verify_column``.
 
 Run:
     python -m src.benchmarking.benchmarks.peerdas.verify_kzg
@@ -26,8 +27,8 @@ def benchmark_verify_kzg(
     block_bytes: int = 4096,
 ) -> None:
     """
-    For each ``L`` in ``columns_per_round``, average time per round to verify ``L``
-    random columns (one ``verify_column`` per column).
+    For each ``L`` in ``columns_per_round``, average time per round
+    to verify ``L`` random columns (one ``verify_column`` per column).
     """
     logger = CSVLogger(
         benchmark_csv("peerdas_verify_kzg.csv"),
