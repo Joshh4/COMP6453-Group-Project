@@ -1,6 +1,7 @@
 import csv
 import os
 
+
 class CSVLogger:
     def __init__(self, filename, fieldnames):
         os.makedirs(os.path.dirname(filename), exist_ok=True)
