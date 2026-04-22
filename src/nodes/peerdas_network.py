@@ -2,47 +2,6 @@
 """
 PeerDAS - Networking Layer
 ==========================
-Adapted from CONDA networking for PeerDAS (Ethereum EIP-7594).
-
-What changed from the CONDA version?
---------------------------------------
-  CONDA    : one unique symbol per node, Merkle proof per symbol.
-  PeerDAS  : data arranged as a blob matrix (rows = blobs,
-             cols = columns).  Each DA node custodies a SUBSET
-             of columns (its "custody subnet").  Multiple nodes
-             hold the same column -- this is the committee model
-             that makes PeerDAS scale.  Proofs are KZG multiproofs
-             rather than Merkle proofs.
-
-Encoding status
----------------
-  Two separate teammate modules feed into _encode_matrix():
-
-  rs.py / block.py  [COMMITTED -- integrated below]
-      Real Reed-Solomon encoding over GF(256).
-      _rs_encode_matrix() uses these to produce a genuine blob
-      matrix from the raw block data.
-
-      Limitation: GF(256) operates on individual bytes, not the
-      large field elements (32 bytes each) that Ethereum's BLS12-381
-      curve requires.  For a demo / prototype this is fine.  When
-      the full KZG module lands, the field will change but the
-      matrix shape and commitment interface stay the same.
-
-  kzg.py  [INTEGRATED]
-      KZGContext wraps CCfull and exposes three methods used here:
-        commit_matrix()  : commits to each blob row, returns
-                           hex G1 commitments + KZG-evaluated cells
-        open_column()    : builds a per-column KZG multiproof
-        verify_column()  : checks cells against commitments
-
-      The prototype uses D=1 (one field element per cell) to match
-      the GF(256) byte-level RS output.  Switching to the full
-      Ethereum parameters (D=64) only requires changing KZGContext's
-      D argument — the rest of this file is unaffected.
-
-  _encode_matrix() is the single call site that ties everything
-  together.
 
 Three roles
 -----------
@@ -56,20 +15,6 @@ Three roles
 
   Verifier  : thin network layer only -- no sampling logic here.
               Sampling decisions live in sampler.py.
-
-Subnet / committee model
-------------------------
-  In Ethereum's PeerDAS spec each node custodies at least
-  CUSTODY_REQUIREMENT column subnets (default >= 2 of 128).
-  Here custody_columns is a set[int] given at node creation.
-  SubnetRegistry maps col_index -> list[NodeInfo].
-
-Shared KZG context
-------------------
-  The trusted setup (SRS) must be the same object in the disperser
-  and the verifier.  _get_kzg_ctx() caches one KZGContext per
-  (n_blobs, n_cols) pair for the lifetime of the process.  In a
-  real deployment the SRS would be loaded from a pre-computed file.
 """
 
 import asyncio
@@ -80,24 +25,14 @@ import random
 from dataclasses import dataclass
 from typing import Optional
 
-# RS encoder (teammate's module -- committed).
-# Import guard: fall back to None so the file is still importable
-# in environments where the module path isn't set up yet.
-try:
-    from src.reedsolomon.block import Block
-    from src.reedsolomon.rs import RS
-
-    _RS_AVAILABLE = True
-except ImportError:
-    _RS_AVAILABLE = False
-
+from src.reedsolomon.block import Block
+from src.reedsolomon.rs import RS
 from src.commitments.kzg_context import KZGContext
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(message)s",
 )
-
 
 # =============================================================================
 # PeerDAS parameters  (Ethereum mainnet values as defaults)
@@ -108,7 +43,6 @@ N_COLS_DEFAULT = 8  # small value for demo; use 128 for spec
 
 # Number of blobs (rows) per block.  Grows over time in Ethereum.
 N_BLOBS_DEFAULT = 4
-
 
 # =============================================================================
 # Message types
@@ -572,9 +506,7 @@ def _encode_matrix(
       commitments : list[str]              hex G1, one per blob
       col_proofs  : list[str]              hex JSON, one per column
     """
-    if _RS_AVAILABLE:
-        return _rs_encode_matrix(data, n_blobs, n_cols)
-    return _byte_split_matrix(data, n_blobs, n_cols)
+    return _rs_encode_matrix(data, n_blobs, n_cols)
 
 
 def _rs_encode_matrix(
@@ -614,10 +546,7 @@ def _rs_encode_matrix(
         data[b * blob_size : (b + 1) * blob_size] for b in range(n_blobs)
     ]
 
-    # ------------------------------------------------------------------
     # RS encode each blob to build the initial matrix.
-    # (Kept so teammate's module stays exercised in the demo.)
-    # ------------------------------------------------------------------
     rs_matrix = []
     for b, raw in enumerate(raw_blobs):
         # Pad or truncate blob to exactly k bytes.
@@ -627,10 +556,8 @@ def _rs_encode_matrix(
         row = [[b_val] for b_val in enc.data()]
         rs_matrix.append(row)
 
-    # ------------------------------------------------------------------
     # KZG: commit to systematic cells, evaluate over all columns,
     #      and produce one multiproof per column.
-    # ------------------------------------------------------------------
     kzg_ctx = _get_kzg_ctx(n_blobs, n_cols)
 
     # commit_matrix returns KZG-consistent cells alongside commitments
@@ -645,65 +572,6 @@ def _rs_encode_matrix(
     return kzg_matrix, commitments, col_proofs
 
 
-def _byte_split_matrix(
-    data: bytes,
-    n_blobs: int,
-    n_cols: int,
-):
-    """
-    Fallback when rs.py is not importable.
-    Simple byte-split with no real RS redundancy.
-    Also uses real KZG (via _get_kzg_ctx) so verification works.
-    Matches the same output shape as _rs_encode_matrix().
-    """
-    # k = n_cols // 2
-    total = n_blobs * n_cols
-    chunk = max(1, len(data) // total)
-    flat = [
-        [data[i * chunk]] if i * chunk < len(data) else [0]
-        for i in range(total)
-    ]
-
-    # Build a simple matrix from raw bytes.
-    raw_matrix = [
-        [flat[b * n_cols + c] for c in range(n_cols)] for b in range(n_blobs)
-    ]
-
-    # Layer KZG on top, same as the RS path.
-    kzg_ctx = _get_kzg_ctx(n_blobs, n_cols)
-    commitments, states, kzg_matrix = kzg_ctx.commit_matrix(raw_matrix)
-
-    col_proofs = []
-    for c in range(n_cols):
-        _, proof_hex = kzg_ctx.open_column(states, c)
-        col_proofs.append(proof_hex)
-
-    return kzg_matrix, commitments, col_proofs
-
-
-# =============================================================================
-# KZG stubs  -- kept for reference / fallback but no longer called
-#              in the main encode path.  Remove once kzg.py is stable.
-# =============================================================================
-
-
-def _stub_kzg_commit(blob_bytes: bytes) -> str:
-    return hashlib.sha256(blob_bytes).hexdigest()
-
-
-def _stub_kzg_multiproof(col_bytes: bytes) -> str:
-    return hashlib.sha256(col_bytes).hexdigest()
-
-
-def _stub_kzg_verify(
-    commitments: list,
-    col_idx: int,
-    cells: list,
-    proof: str,
-) -> bool:
-    return True
-
-
 # =============================================================================
 # Demo
 # =============================================================================
@@ -714,8 +582,7 @@ async def demo():
     End-to-end PeerDAS demo running in a single process.
 
     8 DA nodes each custody 2 columns.  The disperser RS-encodes
-    the block (real encoding if rs.py is available, byte-split
-    fallback otherwise).  The verifier samples 4 random columns
+    the block.  The verifier samples 4 random columns
     and checks real KZG proofs via the shared KZGContext.
 
     Note: the first call to _get_kzg_ctx() runs the trusted setup
@@ -751,8 +618,7 @@ async def demo():
 
     await asyncio.sleep(0.3)
 
-    enc_label = "RS" if _RS_AVAILABLE else "byte-split (fallback)"
-    print(f"Encoding mode: {enc_label}")
+    print("Encoding mode: RS")
 
     block_data = b"PeerDAS block data demo." * 8
     block_id = await disperser.disperse(block_data)
