@@ -48,7 +48,6 @@ from src.nodes.peerdas_network import (
     NodeInfo,
     SubnetRegistry,
     Verifier,
-    _byte_split_matrix,
     _encode_matrix,
     decode_msg,
     encode_msg,
@@ -367,13 +366,6 @@ class TestEncodeMatrix(unittest.TestCase):
                          "one commitment per blob")
         self.assertEqual(len(col_proofs), self.N_COLS,
                          "one proof per column")
-
-    def test_byte_split_shape(self):
-        matrix, coms, proofs = _byte_split_matrix(
-            b"test data for shape check" * 8,
-            self.N_BLOBS, self.N_COLS,
-        )
-        self._check_shape(matrix, coms, proofs)
 
     def test_encode_matrix_shape(self):
         matrix, coms, proofs = _encode_matrix(
