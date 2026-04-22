@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 PeerDAS - Sampler
 =================
@@ -24,18 +23,6 @@ Each column has a single KZG multiproof covering all blobs at
 that column position.  Sampling a whole column costs one proof
 verification regardless of how many blobs there are.  Individual
 cell sampling is the Danksharding end-state; PeerDAS uses columns.
-
-Plug-in point for KZG
-----------------------
-Replace _stub_kzg_verify() once kzg.py is committed:
-
-    from src.commitments import kzg
-    valid = kzg.verify_multiproof(
-        commitments=resp["commitments"],
-        col_idx=resp["col_index"],
-        cells=resp["cells"],
-        proof=resp["proof"],
-    )
 """
 
 import asyncio
@@ -48,6 +35,7 @@ from src.nodes.peerdas_network import (
     SubnetRegistry,
     Verifier,
 )
+
 
 # =============================================================================
 # Result types
@@ -104,6 +92,9 @@ class Sampler:
         The network layer object used to send/receive messages.
     registry : SubnetRegistry
         Maps column indices to DA nodes that custody them.
+    kzg_ctx : object
+        KZG context used to verify column proofs.  Must expose a
+        verify_column(commitments, col_idx, cells, proof) method.
     n_cols : int
         Total number of columns in the blob matrix.
     sample_count : int
@@ -122,14 +113,15 @@ class Sampler:
         self,
         verifier: Verifier,
         registry: SubnetRegistry,
+        kzg_ctx: object,
         n_cols: int,
         sample_count: int = 0,
         threshold: float = 1.0,
     ):
         self.verifier = verifier
         self.registry = registry
+        self.kzg_ctx = kzg_ctx
         self.n_cols = n_cols
-        # 0 means "sample everything" -- useful for small demos.
         self.sample_count = sample_count if sample_count > 0 else n_cols
         self.threshold = threshold
         self.logger = logging.getLogger(f"Sampler({verifier.info.node_id})")
@@ -148,7 +140,7 @@ class Sampler:
             min(self.sample_count, self.n_cols),
         )
         self.logger.info(
-            f"Sampling block {block_id}: " f"{len(cols)}/{self.n_cols} columns"
+            f"Sampling block {block_id}: {len(cols)}/{self.n_cols} columns"
         )
         return await self._run_sample(block_id, cols)
 
@@ -168,18 +160,14 @@ class Sampler:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    async def _run_sample(
-        self,
-        block_id: str,
-        cols: list,
-    ) -> SampleResult:
+    async def _run_sample(self, block_id: str, cols: list) -> SampleResult:
         """Fire all column requests concurrently and tally results."""
         tasks = [self._sample_one_column(block_id, c) for c in cols]
         results: list[ColumnResult] = await asyncio.gather(*tasks)
 
         verified = sum(1 for r in results if r.verified)
-        failed = sum(1 for r in results if r.responded and not r.verified)
-        no_resp = sum(1 for r in results if not r.responded)
+        failed   = sum(1 for r in results if r.responded and not r.verified)
+        no_resp  = sum(1 for r in results if not r.responded)
         required = int(len(cols) * self.threshold)
         available = verified >= required
 
@@ -218,7 +206,6 @@ class Sampler:
                 error=f"No nodes custody column {col_idx}",
             )
 
-        # Any node in the subnet can serve this column.
         node = random.choice(subnet)
         resp = await self.verifier.fetch_column(node, block_id, col_idx)
 
@@ -231,21 +218,12 @@ class Sampler:
                 error="No response or unavailable",
             )
 
-        # ------------------------------------------------------------------
-        # SWAP for real KZG once kzg.py is committed:
-        #   from src.commitments import kzg
-        #   valid = kzg.verify_multiproof(
-        #       resp["commitments"],
-        #       resp["col_index"],
-        #       resp["cells"],
-        #       resp["proof"])
-        valid = _stub_kzg_verify(
-            commitments=resp["commitments"],
-            col_idx=resp["col_index"],
-            cells=resp["cells"],
-            proof=resp["proof"],
+        valid = self.kzg_ctx.verify_column(
+            resp["commitments"],
+            resp["col_index"],
+            resp["cells"],
+            resp["proof"],
         )
-        # ------------------------------------------------------------------
 
         return ColumnResult(
             col_index=col_idx,
@@ -254,26 +232,3 @@ class Sampler:
             verified=valid,
             error=("" if valid else "KZG multiproof verification failed"),
         )
-
-
-# =============================================================================
-# Stub KZG verifier  [replace when kzg.py is committed]
-# =============================================================================
-
-
-def _stub_kzg_verify(
-    commitments: list,  # list[str] -- one KZG commitment per blob
-    col_idx: int,
-    cells: list,  # list[list[int]] -- one cell per blob
-    proof: str,  # KZG multiproof (hex str)
-) -> bool:
-    """
-    Placeholder for kzg.verify_multiproof().
-
-    Always returns True so the demo runs without real KZG.
-    Replace with:
-        from src.commitments import kzg
-        return kzg.verify_multiproof(
-            commitments, col_idx, cells, proof)
-    """
-    return True

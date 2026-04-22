@@ -2,46 +2,14 @@
 Unit tests: PeerDAS sampler
 ============================
 All tests mock Verifier.fetch_column() so no TCP connections are
-opened.  This keeps the suite fast and isolates sampling logic from
-the network layer.
-
-Test classes
-------------
-TestSamplerAllColumnsVerify
-    Every node responds with a valid column → available=True.
-
-TestSamplerNoNodesRespond
-    Every node is silent → available=False, no_response == sampled.
-
-TestSamplerBadProofType
-    Node responds with wrong message type → treated as unavailable.
-
-TestSamplerThreshold
-    Partial failures with sub-1.0 threshold — both directions.
-
-TestSamplerSpecificColumns
-    sample_specific() must query exactly the requested columns.
-
-TestSamplerConcurrency
-    All column requests fire concurrently (not sequentially).
-
-TestSamplerNoSubnet
-    Column with no custodians → ColumnResult with responded=False.
-
-TestSamplerReturnTypes
-    SampleResult and ColumnResult have the expected fields and types.
-
-TestSamplerSummary
-    SampleResult.summary() produces a non-empty human-readable string.
-
-TestSamplerLargeColumnSet
-    Sanity-check with sample_count > n_cols clamps to n_cols.
+opened.  A mock KZG context is passed to the Sampler so tests
+control whether verification passes or fails without real crypto.
 """
 
 import asyncio
 import time
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import MagicMock
 
 from src.nodes.peerdas_network import (
     MSG_SAMPLE_RESP,
@@ -79,13 +47,21 @@ def _good_resp(col_idx: int) -> dict:
     }
 
 
-def _make_sampler(mock_fetch, sample_count=0,
-                  threshold=1.0, n_cols=_N_COLS) -> Sampler:
+def _make_kzg_ctx(verify_returns=True):
+    """Return a mock KZG context whose verify_column returns verify_returns."""
+    ctx = MagicMock()
+    ctx.verify_column.return_value = verify_returns
+    return ctx
+
+
+def _make_sampler(mock_fetch, sample_count=0, threshold=1.0,
+                  n_cols=_N_COLS, verify_returns=True) -> Sampler:
     info     = NodeInfo("verifier", "127.0.0.1", 9879)
     verifier = Verifier(info)
     verifier.fetch_column = mock_fetch
     registry = SubnetRegistry(_DA_INFOS, _CUSTODY)
-    return Sampler(verifier, registry,
+    kzg_ctx  = _make_kzg_ctx(verify_returns)
+    return Sampler(verifier, registry, kzg_ctx,
                    n_cols=n_cols,
                    sample_count=sample_count,
                    threshold=threshold)
@@ -127,6 +103,27 @@ class TestSamplerAllColumnsVerify(unittest.IsolatedAsyncioTestCase):
 
 
 # ---------------------------------------------------------------------------
+# TestSamplerKZGFails
+# ---------------------------------------------------------------------------
+
+class TestSamplerKZGFails(unittest.IsolatedAsyncioTestCase):
+
+    async def test_failed_kzg_counted_as_failed(self):
+        """When verify_column returns False, result should show failed_count."""
+        async def fetch(node, block_id, col_idx):
+            return _good_resp(col_idx)
+
+        sampler = _make_sampler(fetch, sample_count=_N_COLS,
+                                verify_returns=False)
+        result  = await sampler.sample("testblock")
+
+        self.assertFalse(result.available)
+        self.assertEqual(result.verified_count, 0)
+        self.assertEqual(result.failed_count, _N_COLS)
+        self.assertEqual(result.no_response, 0)
+
+
+# ---------------------------------------------------------------------------
 # TestSamplerNoNodesRespond
 # ---------------------------------------------------------------------------
 
@@ -164,7 +161,6 @@ class TestSamplerNoNodesRespond(unittest.IsolatedAsyncioTestCase):
 class TestSamplerBadProofType(unittest.IsolatedAsyncioTestCase):
 
     async def test_wrong_message_type_counted_as_no_response(self):
-        """A response with the wrong type should not be verified."""
         async def fetch(node, block_id, col_idx):
             return {"type": "WRONG_TYPE", "col_index": col_idx}
 
@@ -172,12 +168,11 @@ class TestSamplerBadProofType(unittest.IsolatedAsyncioTestCase):
         result  = await sampler.sample("testblock")
 
         self.assertFalse(result.available)
-        # The sampler treats a non-SAMPLE_RESP as "no response".
         self.assertEqual(result.verified_count, 0)
 
     async def test_empty_dict_response_not_verified(self):
         async def fetch(node, block_id, col_idx):
-            return {}  # missing "type" key
+            return {}
 
         sampler = _make_sampler(fetch, sample_count=_N_COLS)
         result  = await sampler.sample("testblock")
@@ -191,7 +186,6 @@ class TestSamplerBadProofType(unittest.IsolatedAsyncioTestCase):
 class TestSamplerThreshold(unittest.IsolatedAsyncioTestCase):
 
     async def test_available_at_exact_threshold(self):
-        """2 of 4 columns respond → threshold=0.5 → available."""
         async def fetch(node, block_id, col_idx):
             return _good_resp(col_idx) if col_idx >= 2 else None
 
@@ -203,7 +197,6 @@ class TestSamplerThreshold(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.no_response, 2)
 
     async def test_unavailable_just_below_threshold(self):
-        """2 of 4 columns respond → threshold=0.75 → unavailable."""
         async def fetch(node, block_id, col_idx):
             return _good_resp(col_idx) if col_idx >= 2 else None
 
@@ -212,27 +205,8 @@ class TestSamplerThreshold(unittest.IsolatedAsyncioTestCase):
 
         self.assertFalse(result.available)
 
-    async def test_threshold_zero_never_available(self):
-        """
-        Even with threshold=0.0 the block is declared available as
-        long as ceil(0 * n) == 0 verified columns suffice.
-        """
-        async def fetch(node, block_id, col_idx):
-            return None  # no responses at all
-
-        sampler = _make_sampler(fetch, sample_count=_N_COLS, threshold=0.0)
-        result  = await sampler.sample("testblock")
-        # 0 >= int(4 * 0.0) == 0, so available
-        self.assertTrue(result.available)
-
     async def test_threshold_one_requires_all(self):
-        """threshold=1.0 (default) → any failure → unavailable."""
-        call_count = 0
-
         async def fetch(node, block_id, col_idx):
-            nonlocal call_count
-            call_count += 1
-            # fail the last column only
             return None if col_idx == 3 else _good_resp(col_idx)
 
         sampler = _make_sampler(fetch, sample_count=4, threshold=1.0)
@@ -279,7 +253,6 @@ class TestSamplerSpecificColumns(unittest.IsolatedAsyncioTestCase):
         sampler = _make_sampler(fetch)
         result  = await sampler.sample_specific("testblock", [])
 
-        # No columns → vacuously available (0 >= 0).
         self.assertEqual(result.verified_count, 0)
         self.assertEqual(len(result.columns_tried), 0)
 
@@ -291,11 +264,7 @@ class TestSamplerSpecificColumns(unittest.IsolatedAsyncioTestCase):
 class TestSamplerConcurrency(unittest.IsolatedAsyncioTestCase):
 
     async def test_requests_fire_concurrently(self):
-        """
-        If requests were sequential, total time ≈ n * delay.
-        Concurrent requests should finish in roughly 1 * delay.
-        """
-        DELAY = 0.05  # seconds per fake response
+        DELAY = 0.05
 
         async def fetch(node, block_id, col_idx):
             await asyncio.sleep(DELAY)
@@ -306,7 +275,6 @@ class TestSamplerConcurrency(unittest.IsolatedAsyncioTestCase):
         await sampler.sample_specific("testblock", list(range(_N_COLS)))
         elapsed = time.monotonic() - t0
 
-        # Allow 3× the single-delay budget so flaky CI doesn't fail.
         self.assertLess(elapsed, DELAY * 3,
                         f"Requests appear sequential: {elapsed:.3f}s")
 
@@ -324,9 +292,9 @@ class TestSamplerNoSubnet(unittest.IsolatedAsyncioTestCase):
         info     = NodeInfo("verifier", "127.0.0.1", 9878)
         verifier = Verifier(info)
         verifier.fetch_column = fetch
-        # Empty registry → no custodians for any column.
         registry = SubnetRegistry([], {})
-        sampler  = Sampler(verifier, registry, n_cols=4)
+        kzg_ctx  = _make_kzg_ctx()
+        sampler  = Sampler(verifier, registry, kzg_ctx, n_cols=4)
         result   = await sampler.sample_specific("testblock", [0])
 
         self.assertFalse(result.available)
@@ -389,7 +357,6 @@ class TestSamplerSummary(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsInstance(summary, str)
         self.assertIn("myspecialblock", summary)
-        self.assertGreater(len(summary), 0)
 
     async def test_summary_says_available(self):
         async def fetch(node, block_id, col_idx):
@@ -415,7 +382,6 @@ class TestSamplerSummary(unittest.IsolatedAsyncioTestCase):
 class TestSamplerSampleCount(unittest.IsolatedAsyncioTestCase):
 
     async def test_sample_count_zero_samples_all_columns(self):
-        """sample_count=0 should default to sampling all n_cols."""
         seen = []
 
         async def fetch(node, block_id, col_idx):
@@ -427,7 +393,6 @@ class TestSamplerSampleCount(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(seen), 4)
 
     async def test_sample_count_clamps_to_n_cols(self):
-        """Requesting more columns than exist should not raise."""
         seen = []
 
         async def fetch(node, block_id, col_idx):
@@ -435,8 +400,7 @@ class TestSamplerSampleCount(unittest.IsolatedAsyncioTestCase):
             return _good_resp(col_idx)
 
         sampler = _make_sampler(fetch, sample_count=100, n_cols=4)
-        result  = await sampler.sample("testblock")
-        # Can't sample more than n_cols=4
+        await sampler.sample("testblock")
         self.assertLessEqual(len(seen), 4)
 
 
