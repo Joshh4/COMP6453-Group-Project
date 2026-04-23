@@ -3,12 +3,6 @@ kzg_context.py
 ==============
 Adapter that bridges peerdas_network.py and sampler.py to the
 KZG implementation in src/commitments/KZG.py.
-
-kzg.py is completely untouched — all integration logic lives here.
-
-Adjust the import path below if your Python path is set up so that
-KZG.py is importable under a different name (e.g. just `from kzg
-import ...` if you run from the project root with src/ on the path).
 """
 
 import json
