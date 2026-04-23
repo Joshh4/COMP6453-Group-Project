@@ -96,18 +96,19 @@ def benchmark_verify_kzg_geometries(
     block_bytes: int = 2048,
 ) -> None:
     """
-    Compare verifier speed across several ``(n_blobs, n_cols)`` pairs in one CSV.
+    Compare verifier speed for several ``(n_blobs, n_cols)`` pairs in one CSV.
 
-    For each geometry, encodes once, then for each ``L`` in ``columns_per_round``
-    measures ``rounds`` rounds of naive per-column verification (same as
-    :func:`benchmark_verify_kzg`). Use ``L=1`` and compare ``avg_ms_per_verify``
-    to see how **blob count** scales (about ``2 * n_blobs`` pairings per column);
-    vary ``n_cols`` at fixed ``n_blobs`` to see domain / matrix-width effects.
+    For each geometry, encodes once, then for each ``L`` in
+    ``columns_per_round`` measures ``rounds`` rounds of naive per-column
+    verification (same as ``benchmark_verify_kzg``). Use ``L=1`` and compare
+    ``avg_ms_per_verify`` to see how **blob count** scales (about
+    ``2 * n_blobs`` pairings per column); vary ``n_cols`` at fixed ``n_blobs``
+    to see domain / matrix-width effects.
 
     Uses one ``CSVLogger`` for the whole sweep, so the output file is not
     truncated between geometries (calling ``benchmark_verify_kzg`` in a loop
-    would overwrite the default CSV on every iteration because each call opens
-    the file in write mode).
+    would overwrite the default CSV on every iteration because each call
+    opens the file in write mode).
     """
     logger = CSVLogger(
         benchmark_csv("peerdas_verify_kzg.csv"),
@@ -168,10 +169,10 @@ def benchmark_verify_kzg_geometries(
 
 
 if __name__ == "__main__":
-    # Default: sweep several (n_blobs, n_cols) pairs in one CSV.  L values are
+    # Default: sweep several (n_blobs, n_cols) pairs in one CSV. L values are
     # capped at n_cols; we use L <= 4 so the (2, 4) row is not duplicated for
-    # L=4 vs L=8 (both would verify four columns).  For a single geometry or
-    # larger L (e.g. 8 on wide matrices), call benchmark_verify_kzg(...) instead.
+    # L=4 vs L=8 (both would verify four columns). For a single geometry or
+    # larger L (e.g. 8 on wide matrices), call benchmark_verify_kzg instead.
     benchmark_verify_kzg_geometries(
         configs=[(2, 4), (2, 8), (4, 8), (4, 16)],
         columns_per_round=[1, 2, 4],
