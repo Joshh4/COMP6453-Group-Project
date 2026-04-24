@@ -520,7 +520,7 @@ def _rs_encode_matrix(
     RS step (unchanged from original):
       k = n_cols // 2  message bytes -> n_cols coded bytes per blob.
 
-    KZG step (replaces stubs):
+    KZG step:
       KZGContext.commit_matrix() commits to the k systematic bytes
       and returns KZG-evaluated cells for all n_cols positions.
       KZGContext.open_column() builds one multiproof per column.
