@@ -76,7 +76,7 @@ class RS:
             )
 
         # interpret the bytes as elements of the field GF(256)
-        data_galois = self.gf(list(block.data()))
+        data_galois = self.gf(list(block._data))
 
         out_arr = bytearray(self.n)
 

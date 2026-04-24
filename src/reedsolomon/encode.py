@@ -1,5 +1,5 @@
-from block import Block
-from rs import RS
+from src.reedsolomon.block import Block
+from src.reedsolomon.rs import RS
 
 
 def extract_data(blocks: tuple[Block]) -> bytearray:
