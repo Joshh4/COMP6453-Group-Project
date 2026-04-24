@@ -7,7 +7,7 @@ context is generated once.  Avoids a Python 3.10 asyncio bug where
 per-test event loop teardown causes a C-stack segfault via reprlib.
 
 Run with:
-    python -m pytest tests/integration/simple.py -v
+    python -m pytest tests/integration/test_network.py -v
 """
 
 import asyncio
