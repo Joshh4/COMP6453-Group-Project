@@ -38,12 +38,12 @@ _CUSTODY = {
 
 def _good_resp(col_idx: int) -> dict:
     return {
-        "type":        MSG_SAMPLE_RESP,
-        "block_id":    "testblock",
-        "col_index":   col_idx,
-        "cells":       [[col_idx, col_idx + 1], [col_idx + 2, col_idx + 3]],
+        "type": MSG_SAMPLE_RESP,
+        "block_id": "testblock",
+        "col_index": col_idx,
+        "cells": [[col_idx, col_idx + 1], [col_idx + 2, col_idx + 3]],
         "commitments": [f"com{col_idx}a", f"com{col_idx}b"],
-        "proof":       f'["proof{col_idx}a","proof{col_idx}b"]',
+        "proof": f'["proof{col_idx}a","proof{col_idx}b"]',
     }
 
 
@@ -54,31 +54,40 @@ def _make_kzg_ctx(verify_returns=True):
     return ctx
 
 
-def _make_sampler(mock_fetch, sample_count=0, threshold=1.0,
-                  n_cols=_N_COLS, verify_returns=True) -> Sampler:
-    info     = NodeInfo("verifier", "127.0.0.1", 9879)
+def _make_sampler(
+    mock_fetch,
+    sample_count=0,
+    threshold=1.0,
+    n_cols=_N_COLS,
+    verify_returns=True,
+) -> Sampler:
+    info = NodeInfo("verifier", "127.0.0.1", 9879)
     verifier = Verifier(info)
     verifier.fetch_column = mock_fetch
     registry = SubnetRegistry(_DA_INFOS, _CUSTODY)
-    kzg_ctx  = _make_kzg_ctx(verify_returns)
-    return Sampler(verifier, registry, kzg_ctx,
-                   n_cols=n_cols,
-                   sample_count=sample_count,
-                   threshold=threshold)
+    kzg_ctx = _make_kzg_ctx(verify_returns)
+    return Sampler(
+        verifier,
+        registry,
+        kzg_ctx,
+        n_cols=n_cols,
+        sample_count=sample_count,
+        threshold=threshold,
+    )
 
 
 # ---------------------------------------------------------------------------
 # TestSamplerAllColumnsVerify
 # ---------------------------------------------------------------------------
 
-class TestSamplerAllColumnsVerify(unittest.IsolatedAsyncioTestCase):
 
+class TestSamplerAllColumnsVerify(unittest.IsolatedAsyncioTestCase):
     async def test_available_when_all_verify(self):
         async def fetch(node, block_id, col_idx):
             return _good_resp(col_idx)
 
         sampler = _make_sampler(fetch, sample_count=_N_COLS)
-        result  = await sampler.sample("testblock")
+        result = await sampler.sample("testblock")
 
         self.assertTrue(result.available)
         self.assertEqual(result.verified_count, _N_COLS)
@@ -90,7 +99,7 @@ class TestSamplerAllColumnsVerify(unittest.IsolatedAsyncioTestCase):
             return _good_resp(col_idx)
 
         sampler = _make_sampler(fetch, sample_count=_N_COLS)
-        result  = await sampler.sample("testblock")
+        result = await sampler.sample("testblock")
         self.assertEqual(len(result.columns_tried), _N_COLS)
 
     async def test_block_id_preserved(self):
@@ -98,7 +107,7 @@ class TestSamplerAllColumnsVerify(unittest.IsolatedAsyncioTestCase):
             return _good_resp(col_idx)
 
         sampler = _make_sampler(fetch, sample_count=_N_COLS)
-        result  = await sampler.sample("myblock123")
+        result = await sampler.sample("myblock123")
         self.assertEqual(result.block_id, "myblock123")
 
 
@@ -106,16 +115,18 @@ class TestSamplerAllColumnsVerify(unittest.IsolatedAsyncioTestCase):
 # TestSamplerKZGFails
 # ---------------------------------------------------------------------------
 
-class TestSamplerKZGFails(unittest.IsolatedAsyncioTestCase):
 
+class TestSamplerKZGFails(unittest.IsolatedAsyncioTestCase):
     async def test_failed_kzg_counted_as_failed(self):
         """When verify_column returns False, result should show failed_count."""
+
         async def fetch(node, block_id, col_idx):
             return _good_resp(col_idx)
 
-        sampler = _make_sampler(fetch, sample_count=_N_COLS,
-                                verify_returns=False)
-        result  = await sampler.sample("testblock")
+        sampler = _make_sampler(
+            fetch, sample_count=_N_COLS, verify_returns=False
+        )
+        result = await sampler.sample("testblock")
 
         self.assertFalse(result.available)
         self.assertEqual(result.verified_count, 0)
@@ -127,14 +138,14 @@ class TestSamplerKZGFails(unittest.IsolatedAsyncioTestCase):
 # TestSamplerNoNodesRespond
 # ---------------------------------------------------------------------------
 
-class TestSamplerNoNodesRespond(unittest.IsolatedAsyncioTestCase):
 
+class TestSamplerNoNodesRespond(unittest.IsolatedAsyncioTestCase):
     async def test_unavailable_when_silent(self):
         async def fetch(node, block_id, col_idx):
             return None
 
         sampler = _make_sampler(fetch, sample_count=_N_COLS)
-        result  = await sampler.sample("testblock")
+        result = await sampler.sample("testblock")
 
         self.assertFalse(result.available)
         self.assertEqual(result.verified_count, 0)
@@ -146,7 +157,7 @@ class TestSamplerNoNodesRespond(unittest.IsolatedAsyncioTestCase):
             return None
 
         sampler = _make_sampler(fetch, sample_count=1)
-        result  = await sampler.sample_specific("testblock", [0])
+        result = await sampler.sample_specific("testblock", [0])
         cr = result.results[0]
 
         self.assertFalse(cr.responded)
@@ -158,14 +169,14 @@ class TestSamplerNoNodesRespond(unittest.IsolatedAsyncioTestCase):
 # TestSamplerBadProofType
 # ---------------------------------------------------------------------------
 
-class TestSamplerBadProofType(unittest.IsolatedAsyncioTestCase):
 
+class TestSamplerBadProofType(unittest.IsolatedAsyncioTestCase):
     async def test_wrong_message_type_counted_as_no_response(self):
         async def fetch(node, block_id, col_idx):
             return {"type": "WRONG_TYPE", "col_index": col_idx}
 
         sampler = _make_sampler(fetch, sample_count=_N_COLS)
-        result  = await sampler.sample("testblock")
+        result = await sampler.sample("testblock")
 
         self.assertFalse(result.available)
         self.assertEqual(result.verified_count, 0)
@@ -175,7 +186,7 @@ class TestSamplerBadProofType(unittest.IsolatedAsyncioTestCase):
             return {}
 
         sampler = _make_sampler(fetch, sample_count=_N_COLS)
-        result  = await sampler.sample("testblock")
+        result = await sampler.sample("testblock")
         self.assertFalse(result.available)
 
 
@@ -183,14 +194,14 @@ class TestSamplerBadProofType(unittest.IsolatedAsyncioTestCase):
 # TestSamplerThreshold
 # ---------------------------------------------------------------------------
 
-class TestSamplerThreshold(unittest.IsolatedAsyncioTestCase):
 
+class TestSamplerThreshold(unittest.IsolatedAsyncioTestCase):
     async def test_available_at_exact_threshold(self):
         async def fetch(node, block_id, col_idx):
             return _good_resp(col_idx) if col_idx >= 2 else None
 
         sampler = _make_sampler(fetch, sample_count=4, threshold=0.5)
-        result  = await sampler.sample_specific("testblock", [0, 1, 2, 3])
+        result = await sampler.sample_specific("testblock", [0, 1, 2, 3])
 
         self.assertTrue(result.available)
         self.assertEqual(result.verified_count, 2)
@@ -201,7 +212,7 @@ class TestSamplerThreshold(unittest.IsolatedAsyncioTestCase):
             return _good_resp(col_idx) if col_idx >= 2 else None
 
         sampler = _make_sampler(fetch, sample_count=4, threshold=0.75)
-        result  = await sampler.sample_specific("testblock", [0, 1, 2, 3])
+        result = await sampler.sample_specific("testblock", [0, 1, 2, 3])
 
         self.assertFalse(result.available)
 
@@ -210,7 +221,7 @@ class TestSamplerThreshold(unittest.IsolatedAsyncioTestCase):
             return None if col_idx == 3 else _good_resp(col_idx)
 
         sampler = _make_sampler(fetch, sample_count=4, threshold=1.0)
-        result  = await sampler.sample_specific("testblock", [0, 1, 2, 3])
+        result = await sampler.sample_specific("testblock", [0, 1, 2, 3])
 
         self.assertFalse(result.available)
         self.assertEqual(result.verified_count, 3)
@@ -221,8 +232,8 @@ class TestSamplerThreshold(unittest.IsolatedAsyncioTestCase):
 # TestSamplerSpecificColumns
 # ---------------------------------------------------------------------------
 
-class TestSamplerSpecificColumns(unittest.IsolatedAsyncioTestCase):
 
+class TestSamplerSpecificColumns(unittest.IsolatedAsyncioTestCase):
     async def test_queries_exactly_given_columns(self):
         seen = []
 
@@ -231,7 +242,7 @@ class TestSamplerSpecificColumns(unittest.IsolatedAsyncioTestCase):
             return _good_resp(col_idx)
 
         sampler = _make_sampler(fetch)
-        result  = await sampler.sample_specific("testblock", [0, 2])
+        result = await sampler.sample_specific("testblock", [0, 2])
 
         self.assertEqual(sorted(seen), [0, 2])
         self.assertEqual(result.columns_tried, [0, 2])
@@ -241,7 +252,7 @@ class TestSamplerSpecificColumns(unittest.IsolatedAsyncioTestCase):
             return _good_resp(col_idx)
 
         sampler = _make_sampler(fetch)
-        result  = await sampler.sample_specific("testblock", [1])
+        result = await sampler.sample_specific("testblock", [1])
 
         self.assertTrue(result.available)
         self.assertEqual(result.verified_count, 1)
@@ -251,7 +262,7 @@ class TestSamplerSpecificColumns(unittest.IsolatedAsyncioTestCase):
             return _good_resp(col_idx)
 
         sampler = _make_sampler(fetch)
-        result  = await sampler.sample_specific("testblock", [])
+        result = await sampler.sample_specific("testblock", [])
 
         self.assertEqual(result.verified_count, 0)
         self.assertEqual(len(result.columns_tried), 0)
@@ -261,8 +272,8 @@ class TestSamplerSpecificColumns(unittest.IsolatedAsyncioTestCase):
 # TestSamplerConcurrency
 # ---------------------------------------------------------------------------
 
-class TestSamplerConcurrency(unittest.IsolatedAsyncioTestCase):
 
+class TestSamplerConcurrency(unittest.IsolatedAsyncioTestCase):
     async def test_requests_fire_concurrently(self):
         DELAY = 0.05
 
@@ -275,27 +286,28 @@ class TestSamplerConcurrency(unittest.IsolatedAsyncioTestCase):
         await sampler.sample_specific("testblock", list(range(_N_COLS)))
         elapsed = time.monotonic() - t0
 
-        self.assertLess(elapsed, DELAY * 3,
-                        f"Requests appear sequential: {elapsed:.3f}s")
+        self.assertLess(
+            elapsed, DELAY * 3, f"Requests appear sequential: {elapsed:.3f}s"
+        )
 
 
 # ---------------------------------------------------------------------------
 # TestSamplerNoSubnet
 # ---------------------------------------------------------------------------
 
-class TestSamplerNoSubnet(unittest.IsolatedAsyncioTestCase):
 
+class TestSamplerNoSubnet(unittest.IsolatedAsyncioTestCase):
     async def test_column_with_no_custodians(self):
         async def fetch(node, block_id, col_idx):
             return _good_resp(col_idx)
 
-        info     = NodeInfo("verifier", "127.0.0.1", 9878)
+        info = NodeInfo("verifier", "127.0.0.1", 9878)
         verifier = Verifier(info)
         verifier.fetch_column = fetch
         registry = SubnetRegistry([], {})
-        kzg_ctx  = _make_kzg_ctx()
-        sampler  = Sampler(verifier, registry, kzg_ctx, n_cols=4)
-        result   = await sampler.sample_specific("testblock", [0])
+        kzg_ctx = _make_kzg_ctx()
+        sampler = Sampler(verifier, registry, kzg_ctx, n_cols=4)
+        result = await sampler.sample_specific("testblock", [0])
 
         self.assertFalse(result.available)
         cr = result.results[0]
@@ -307,14 +319,14 @@ class TestSamplerNoSubnet(unittest.IsolatedAsyncioTestCase):
 # TestSamplerReturnTypes
 # ---------------------------------------------------------------------------
 
-class TestSamplerReturnTypes(unittest.IsolatedAsyncioTestCase):
 
+class TestSamplerReturnTypes(unittest.IsolatedAsyncioTestCase):
     async def test_sample_result_fields(self):
         async def fetch(node, block_id, col_idx):
             return _good_resp(col_idx)
 
         sampler = _make_sampler(fetch, sample_count=_N_COLS)
-        result  = await sampler.sample("testblock")
+        result = await sampler.sample("testblock")
 
         self.assertIsInstance(result, SampleResult)
         self.assertIsInstance(result.block_id, str)
@@ -330,7 +342,7 @@ class TestSamplerReturnTypes(unittest.IsolatedAsyncioTestCase):
             return _good_resp(col_idx)
 
         sampler = _make_sampler(fetch, sample_count=1)
-        result  = await sampler.sample_specific("testblock", [0])
+        result = await sampler.sample_specific("testblock", [0])
         cr = result.results[0]
 
         self.assertIsInstance(cr, ColumnResult)
@@ -345,14 +357,14 @@ class TestSamplerReturnTypes(unittest.IsolatedAsyncioTestCase):
 # TestSamplerSummary
 # ---------------------------------------------------------------------------
 
-class TestSamplerSummary(unittest.IsolatedAsyncioTestCase):
 
+class TestSamplerSummary(unittest.IsolatedAsyncioTestCase):
     async def test_summary_contains_block_id(self):
         async def fetch(node, block_id, col_idx):
             return _good_resp(col_idx)
 
         sampler = _make_sampler(fetch, sample_count=_N_COLS)
-        result  = await sampler.sample("myspecialblock")
+        result = await sampler.sample("myspecialblock")
         summary = result.summary()
 
         self.assertIsInstance(summary, str)
@@ -363,7 +375,7 @@ class TestSamplerSummary(unittest.IsolatedAsyncioTestCase):
             return _good_resp(col_idx)
 
         sampler = _make_sampler(fetch, sample_count=_N_COLS)
-        result  = await sampler.sample("testblock")
+        result = await sampler.sample("testblock")
         self.assertIn("AVAILABLE", result.summary())
 
     async def test_summary_says_unavailable(self):
@@ -371,7 +383,7 @@ class TestSamplerSummary(unittest.IsolatedAsyncioTestCase):
             return None
 
         sampler = _make_sampler(fetch, sample_count=_N_COLS)
-        result  = await sampler.sample("testblock")
+        result = await sampler.sample("testblock")
         self.assertIn("UNAVAILABLE", result.summary())
 
 
@@ -379,8 +391,8 @@ class TestSamplerSummary(unittest.IsolatedAsyncioTestCase):
 # TestSamplerSampleCount
 # ---------------------------------------------------------------------------
 
-class TestSamplerSampleCount(unittest.IsolatedAsyncioTestCase):
 
+class TestSamplerSampleCount(unittest.IsolatedAsyncioTestCase):
     async def test_sample_count_zero_samples_all_columns(self):
         seen = []
 

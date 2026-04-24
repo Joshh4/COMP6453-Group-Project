@@ -25,8 +25,8 @@ from src.nodes.peerdas_network import (
 )
 
 N_BLOBS = 2
-N_COLS  = 4
-BASE    = 9600
+N_COLS = 4
+BASE = 9600
 
 
 class TestSimpleRoundTrip(unittest.TestCase):
@@ -35,14 +35,14 @@ class TestSimpleRoundTrip(unittest.TestCase):
     All five tests share the same servers and KZG context.
     """
 
-    loop     = None
-    da       = None
-    disp     = None
+    loop = None
+    da = None
+    disp = None
     verifier = None
-    kzg      = None
+    kzg = None
     registry = None
-    da_info  = None
-    _tasks   = []
+    da_info = None
+    _tasks = []
 
     @classmethod
     def setUpClass(cls):
@@ -58,19 +58,20 @@ class TestSimpleRoundTrip(unittest.TestCase):
 
     @classmethod
     async def _start(cls):
-        da_info       = NodeInfo("da-0",      "127.0.0.1", BASE)
-        disp_info     = NodeInfo("disperser", "127.0.0.1", BASE + 1)
-        ver_info      = NodeInfo("verifier",  "127.0.0.1", BASE + 2)
+        da_info = NodeInfo("da-0", "127.0.0.1", BASE)
+        disp_info = NodeInfo("disperser", "127.0.0.1", BASE + 1)
+        ver_info = NodeInfo("verifier", "127.0.0.1", BASE + 2)
 
-        custody       = {"da-0": set(range(N_COLS))}
-        cls.registry  = SubnetRegistry([da_info], custody)
-        cls.da_info   = da_info
+        custody = {"da-0": set(range(N_COLS))}
+        cls.registry = SubnetRegistry([da_info], custody)
+        cls.da_info = da_info
 
-        cls.da        = DANode(da_info, set(range(N_COLS)))
-        cls.disp      = Disperser(disp_info, cls.registry,
-                                  n_blobs=N_BLOBS, n_cols=N_COLS)
-        cls.verifier  = Verifier(ver_info)
-        cls.kzg       = _get_kzg_ctx(N_BLOBS, N_COLS)
+        cls.da = DANode(da_info, set(range(N_COLS)))
+        cls.disp = Disperser(
+            disp_info, cls.registry, n_blobs=N_BLOBS, n_cols=N_COLS
+        )
+        cls.verifier = Verifier(ver_info)
+        cls.kzg = _get_kzg_ctx(N_BLOBS, N_COLS)
 
         cls._tasks = [
             asyncio.create_task(cls.da.start()),
@@ -99,12 +100,14 @@ class TestSimpleRoundTrip(unittest.TestCase):
 
     def test_01_disperse_and_verify_one_column(self):
         """Happy path: disperse a block and verify column 0."""
+
         async def _run():
             block_id = await self.disp.disperse(b"simple integration test" * 4)
             await asyncio.sleep(0.2)
 
-            self.assertIn(block_id, self.da.store,
-                          "DA node should have stored the block")
+            self.assertIn(
+                block_id, self.da.store, "DA node should have stored the block"
+            )
 
             resp = await self.verifier.fetch_column(self.da_info, block_id, 0)
             self.assertIsNotNone(resp)
@@ -120,6 +123,7 @@ class TestSimpleRoundTrip(unittest.TestCase):
 
     def test_02_all_columns_verify(self):
         """All N_COLS columns should have valid KZG proofs after dispersal."""
+
         async def _run():
             block_id = await self.disp.disperse(b"all columns test" * 4)
             await asyncio.sleep(0.2)
@@ -132,8 +136,10 @@ class TestSimpleRoundTrip(unittest.TestCase):
                 self.assertEqual(resp["type"], MSG_SAMPLE_RESP)
                 self.assertTrue(
                     self.kzg.verify_column(
-                        resp["commitments"], col_idx,
-                        resp["cells"], resp["proof"],
+                        resp["commitments"],
+                        col_idx,
+                        resp["cells"],
+                        resp["proof"],
                     ),
                     f"KZG proof failed for col {col_idx}",
                 )
@@ -142,6 +148,7 @@ class TestSimpleRoundTrip(unittest.TestCase):
 
     def test_03_tampered_cell_fails_verification(self):
         """Flipping a byte in a cell should cause verify_column to return False."""
+
         async def _run():
             block_id = await self.disp.disperse(b"tamper test data" * 4)
             await asyncio.sleep(0.2)
@@ -149,7 +156,7 @@ class TestSimpleRoundTrip(unittest.TestCase):
             resp = await self.verifier.fetch_column(self.da_info, block_id, 0)
             self.assertIsNotNone(resp)
 
-            tampered       = [list(cell) for cell in resp["cells"]]
+            tampered = [list(cell) for cell in resp["cells"]]
             tampered[0][0] = (tampered[0][0] + 1) % 256
 
             self.assertFalse(
@@ -168,20 +175,21 @@ class TestSimpleRoundTrip(unittest.TestCase):
         enough resolution to distinguish different inputs.
         """
         N_COLS_8 = 8
-        BASE_8   = BASE + 10
+        BASE_8 = BASE + 10
 
         async def _run():
-            da_info8   = NodeInfo("da-8",     "127.0.0.1", BASE_8)
-            disp_info8 = NodeInfo("disp-8",   "127.0.0.1", BASE_8 + 1)
-            ver_info8  = NodeInfo("ver-8",    "127.0.0.1", BASE_8 + 2)
+            da_info8 = NodeInfo("da-8", "127.0.0.1", BASE_8)
+            disp_info8 = NodeInfo("disp-8", "127.0.0.1", BASE_8 + 1)
+            ver_info8 = NodeInfo("ver-8", "127.0.0.1", BASE_8 + 2)
 
-            custody8   = {"da-8": set(range(N_COLS_8))}
-            registry8  = SubnetRegistry([da_info8], custody8)
-            da8        = DANode(da_info8, set(range(N_COLS_8)))
-            disp8      = Disperser(disp_info8, registry8,
-                                   n_blobs=N_BLOBS, n_cols=N_COLS_8)
-            ver8       = Verifier(ver_info8)
-            kzg8       = _get_kzg_ctx(N_BLOBS, N_COLS_8)
+            custody8 = {"da-8": set(range(N_COLS_8))}
+            registry8 = SubnetRegistry([da_info8], custody8)
+            da8 = DANode(da_info8, set(range(N_COLS_8)))
+            disp8 = Disperser(
+                disp_info8, registry8, n_blobs=N_BLOBS, n_cols=N_COLS_8
+            )
+            ver8 = Verifier(ver_info8)
+            kzg8 = _get_kzg_ctx(N_BLOBS, N_COLS_8)
 
             tasks = [
                 asyncio.create_task(da8.start()),
@@ -201,16 +209,21 @@ class TestSimpleRoundTrip(unittest.TestCase):
                 self.assertIsNotNone(resp, f"no response for block {block_id}")
                 self.assertTrue(
                     kzg8.verify_column(
-                        resp["commitments"], 0,
-                        resp["cells"], resp["proof"],
+                        resp["commitments"],
+                        0,
+                        resp["cells"],
+                        resp["proof"],
                     ),
                     f"col 0 failed for block {block_id}",
                 )
 
             com1 = da8.store[id1][0].commitments
             com2 = da8.store[id2][0].commitments
-            self.assertNotEqual(com1, com2,
-                "different blocks should have different commitments")
+            self.assertNotEqual(
+                com1,
+                com2,
+                "different blocks should have different commitments",
+            )
 
             for t in tasks:
                 t.cancel()
@@ -225,20 +238,21 @@ class TestSimpleRoundTrip(unittest.TestCase):
         Note: slower due to KZG trusted setup for new parameters.
         """
         N_COLS_16 = 16
-        BASE_16   = BASE + 20
+        BASE_16 = BASE + 20
 
         async def _run():
-            da_info16   = NodeInfo("da-16",   "127.0.0.1", BASE_16)
+            da_info16 = NodeInfo("da-16", "127.0.0.1", BASE_16)
             disp_info16 = NodeInfo("disp-16", "127.0.0.1", BASE_16 + 1)
-            ver_info16  = NodeInfo("ver-16",  "127.0.0.1", BASE_16 + 2)
+            ver_info16 = NodeInfo("ver-16", "127.0.0.1", BASE_16 + 2)
 
-            custody16  = {"da-16": set(range(N_COLS_16))}
+            custody16 = {"da-16": set(range(N_COLS_16))}
             registry16 = SubnetRegistry([da_info16], custody16)
-            da16       = DANode(da_info16, set(range(N_COLS_16)))
-            disp16     = Disperser(disp_info16, registry16,
-                                   n_blobs=N_BLOBS, n_cols=N_COLS_16)
-            ver16      = Verifier(ver_info16)
-            kzg16      = _get_kzg_ctx(N_BLOBS, N_COLS_16)
+            da16 = DANode(da_info16, set(range(N_COLS_16)))
+            disp16 = Disperser(
+                disp_info16, registry16, n_blobs=N_BLOBS, n_cols=N_COLS_16
+            )
+            ver16 = Verifier(ver_info16)
+            kzg16 = _get_kzg_ctx(N_BLOBS, N_COLS_16)
 
             tasks = [
                 asyncio.create_task(da16.start()),
@@ -250,8 +264,9 @@ class TestSimpleRoundTrip(unittest.TestCase):
             block_id = await disp16.disperse(b"n_cols=16 test data" * 8)
             await asyncio.sleep(0.2)
 
-            self.assertIn(block_id, da16.store,
-                          "DA node should have stored the block")
+            self.assertIn(
+                block_id, da16.store, "DA node should have stored the block"
+            )
 
             for col_idx in range(N_COLS_16):
                 resp = await ver16.fetch_column(da_info16, block_id, col_idx)
@@ -259,8 +274,10 @@ class TestSimpleRoundTrip(unittest.TestCase):
                 self.assertEqual(resp["type"], MSG_SAMPLE_RESP)
                 self.assertTrue(
                     kzg16.verify_column(
-                        resp["commitments"], col_idx,
-                        resp["cells"], resp["proof"],
+                        resp["commitments"],
+                        col_idx,
+                        resp["cells"],
+                        resp["proof"],
                     ),
                     f"KZG proof failed for col {col_idx}",
                 )
@@ -273,6 +290,7 @@ class TestSimpleRoundTrip(unittest.TestCase):
 
     def test_06_missing_block_returns_unavailable(self):
         """Requesting a block that was never dispersed should return MSG_UNAVAILABLE."""
+
         async def _run():
             resp = await self.verifier.fetch_column(
                 self.da_info, "nonexistentblock123", 0

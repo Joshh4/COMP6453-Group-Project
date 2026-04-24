@@ -58,16 +58,17 @@ from src.nodes.peerdas_network import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _col_payload(block_id="blk001", col_index=0, n_cols=8,
-                 n_blobs=2) -> dict:
+
+def _col_payload(block_id="blk001", col_index=0, n_cols=8, n_blobs=2) -> dict:
     """A minimal well-formed MSG_COLUMN payload."""
     return {
         "type": MSG_COLUMN,
         "block_id": block_id,
         "col_index": col_index,
         "n_cols": n_cols,
-        "cells": [list(range(col_index, col_index + 3))
-                  for _ in range(n_blobs)],
+        "cells": [
+            list(range(col_index, col_index + 3)) for _ in range(n_blobs)
+        ],
         "commitments": [f"com{b}" for b in range(n_blobs)],
         "proof": json.dumps([f"proof{b}" for b in range(n_blobs)]),
     }
@@ -81,6 +82,7 @@ def _make_da_node(node_id="da-0", port=0, custody=None) -> DANode:
 # ---------------------------------------------------------------------------
 # TestSubnetRegistry
 # ---------------------------------------------------------------------------
+
 
 class TestSubnetRegistry(unittest.TestCase):
     """Pure data-structure tests — no network, no KZG."""
@@ -136,8 +138,8 @@ class TestSubnetRegistry(unittest.TestCase):
 # TestWireFormat
 # ---------------------------------------------------------------------------
 
-class TestWireFormat(unittest.TestCase):
 
+class TestWireFormat(unittest.TestCase):
     def test_encode_decode_roundtrip(self):
         payload = {"block_id": "abc", "col_index": 3}
         raw = encode_msg(MSG_SAMPLE_REQ, payload)
@@ -162,8 +164,8 @@ class TestWireFormat(unittest.TestCase):
 # TestDANodeHandleColumn  (no TCP)
 # ---------------------------------------------------------------------------
 
-class TestDANodeHandleColumn(unittest.IsolatedAsyncioTestCase):
 
+class TestDANodeHandleColumn(unittest.IsolatedAsyncioTestCase):
     async def test_stores_column_within_custody(self):
         node = _make_da_node(custody={0})
         payload = _col_payload(col_index=0)
@@ -179,8 +181,9 @@ class TestDANodeHandleColumn(unittest.IsolatedAsyncioTestCase):
 
     async def test_stored_column_fields(self):
         node = _make_da_node(custody={2})
-        payload = _col_payload(block_id="myblock", col_index=2,
-                               n_cols=16, n_blobs=3)
+        payload = _col_payload(
+            block_id="myblock", col_index=2, n_cols=16, n_blobs=3
+        )
         await node._handle_column(payload)
         col = node.store["myblock"][2]
         self.assertEqual(col.block_id, "myblock")
@@ -213,10 +216,11 @@ class TestDANodeHandleColumn(unittest.IsolatedAsyncioTestCase):
 # TestDANodeHandleSampleReq  (no TCP)
 # ---------------------------------------------------------------------------
 
-class TestDANodeHandleSampleReq(unittest.IsolatedAsyncioTestCase):
 
-    def _plant_column(self, node: DANode, block_id="blk001",
-                      col_index=0) -> Column:
+class TestDANodeHandleSampleReq(unittest.IsolatedAsyncioTestCase):
+    def _plant_column(
+        self, node: DANode, block_id="blk001", col_index=0
+    ) -> Column:
         col = Column(
             block_id=block_id,
             col_index=col_index,
@@ -276,6 +280,7 @@ class TestDANodeHandleSampleReq(unittest.IsolatedAsyncioTestCase):
 # TestDANodeIntegration  (real TCP, real KZG at tiny parameters)
 # ---------------------------------------------------------------------------
 
+
 class TestDANodeIntegration(unittest.IsolatedAsyncioTestCase):
     """
     These tests start real asyncio servers.  KZG is run at
@@ -283,18 +288,19 @@ class TestDANodeIntegration(unittest.IsolatedAsyncioTestCase):
     """
 
     N_BLOBS = 2
-    N_COLS  = 4
-    BASE    = 9300  # port base — adjust if clashes occur in CI
+    N_COLS = 4
+    BASE = 9300  # port base — adjust if clashes occur in CI
 
     async def asyncSetUp(self):
-        da_info   = NodeInfo("da-0", "127.0.0.1", self.BASE)
+        da_info = NodeInfo("da-0", "127.0.0.1", self.BASE)
         disp_info = NodeInfo("disp", "127.0.0.1", self.BASE + 1)
 
-        self.da   = DANode(da_info, custody_columns={0, 1, 2, 3})
-        custody   = {"da-0": {0, 1, 2, 3}}
-        registry  = SubnetRegistry([da_info], custody)
-        self.disp = Disperser(disp_info, registry,
-                              n_blobs=self.N_BLOBS, n_cols=self.N_COLS)
+        self.da = DANode(da_info, custody_columns={0, 1, 2, 3})
+        custody = {"da-0": {0, 1, 2, 3}}
+        registry = SubnetRegistry([da_info], custody)
+        self.disp = Disperser(
+            disp_info, registry, n_blobs=self.N_BLOBS, n_cols=self.N_COLS
+        )
 
         self._tasks = [
             asyncio.create_task(self.da.start()),
@@ -313,15 +319,16 @@ class TestDANodeIntegration(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn(block_id, self.da.store)
         for c in range(self.N_COLS):
-            self.assertIn(c, self.da.store[block_id],
-                          f"col {c} missing from store")
+            self.assertIn(
+                c, self.da.store[block_id], f"col {c} missing from store"
+            )
 
     async def test_stored_column_metadata(self):
         block_id = await self.disp.disperse(b"metadata check" * 4)
         await asyncio.sleep(0.2)
 
         col = self.da.store[block_id][0]
-        self.assertEqual(col.n_cols,  self.N_COLS)
+        self.assertEqual(col.n_cols, self.N_COLS)
         self.assertEqual(len(col.cells), self.N_BLOBS)
         self.assertEqual(len(col.commitments), self.N_BLOBS)
         # proof is a JSON list of hex strings
@@ -342,6 +349,7 @@ class TestDANodeIntegration(unittest.IsolatedAsyncioTestCase):
 # TestEncodeMatrix  (shape + basic sanity, no TCP)
 # ---------------------------------------------------------------------------
 
+
 class TestEncodeMatrix(unittest.TestCase):
     """
     _encode_matrix / _byte_split_matrix: verify shapes only.
@@ -349,34 +357,38 @@ class TestEncodeMatrix(unittest.TestCase):
     """
 
     N_BLOBS = 2
-    N_COLS  = 4
+    N_COLS = 4
 
     def _check_shape(self, matrix, commitments, col_proofs):
-        self.assertEqual(len(matrix), self.N_BLOBS,
-                         "matrix must have n_blobs rows")
+        self.assertEqual(
+            len(matrix), self.N_BLOBS, "matrix must have n_blobs rows"
+        )
         for row in matrix:
-            self.assertEqual(len(row), self.N_COLS,
-                             "each row must have n_cols cells")
+            self.assertEqual(
+                len(row), self.N_COLS, "each row must have n_cols cells"
+            )
             for cell in row:
                 self.assertIsInstance(cell, list)
-                self.assertGreater(len(cell), 0,
-                                   "each cell must be non-empty")
+                self.assertGreater(len(cell), 0, "each cell must be non-empty")
 
-        self.assertEqual(len(commitments), self.N_BLOBS,
-                         "one commitment per blob")
-        self.assertEqual(len(col_proofs), self.N_COLS,
-                         "one proof per column")
+        self.assertEqual(
+            len(commitments), self.N_BLOBS, "one commitment per blob"
+        )
+        self.assertEqual(len(col_proofs), self.N_COLS, "one proof per column")
 
     def test_encode_matrix_shape(self):
         matrix, coms, proofs = _encode_matrix(
             b"test data for shape check" * 8,
-            self.N_BLOBS, self.N_COLS,
+            self.N_BLOBS,
+            self.N_COLS,
         )
         self._check_shape(matrix, coms, proofs)
 
     def test_commitments_are_hex_strings(self):
         _, coms, _ = _encode_matrix(
-            b"abc" * 20, self.N_BLOBS, self.N_COLS,
+            b"abc" * 20,
+            self.N_BLOBS,
+            self.N_COLS,
         )
         for com in coms:
             self.assertIsInstance(com, str)
@@ -385,7 +397,9 @@ class TestEncodeMatrix(unittest.TestCase):
 
     def test_proofs_are_json_lists(self):
         _, _, proofs = _encode_matrix(
-            b"abc" * 20, self.N_BLOBS, self.N_COLS,
+            b"abc" * 20,
+            self.N_BLOBS,
+            self.N_COLS,
         )
         for proof in proofs:
             parsed = json.loads(proof)
@@ -393,10 +407,8 @@ class TestEncodeMatrix(unittest.TestCase):
             self.assertEqual(len(parsed), self.N_BLOBS)
 
     def test_different_data_gives_different_commitments(self):
-        _, coms_a, _ = _encode_matrix(b"aaaa" * 20,
-                                      self.N_BLOBS, self.N_COLS)
-        _, coms_b, _ = _encode_matrix(b"bbbb" * 20,
-                                      self.N_BLOBS, self.N_COLS)
+        _, coms_a, _ = _encode_matrix(b"aaaa" * 20, self.N_BLOBS, self.N_COLS)
+        _, coms_b, _ = _encode_matrix(b"bbbb" * 20, self.N_BLOBS, self.N_COLS)
         self.assertNotEqual(coms_a, coms_b)
 
 

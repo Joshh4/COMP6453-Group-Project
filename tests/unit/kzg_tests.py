@@ -17,7 +17,7 @@ from src.commitments.KZG import (
 # We use D=4, k=4 so the blob is 16 elements and the extended domain is 32.
 _D = 4
 _K = 4
-_N = 8   # = 2 * K
+_N = 8  # = 2 * K
 _M = _N * _D  # total domain size = 32
 
 # A primitive 32nd root of unity for BLS12-381's scalar field.
@@ -27,6 +27,7 @@ _OMEGA_32 = pow(
     (FIELD_PRIME - 1) // 32,
     FIELD_PRIME,
 )
+
 
 # Shared across all tests in this module, generated once to avoid
 # repeating the expensive trusted setup for every test.
@@ -54,6 +55,7 @@ def blob():
 
 # RootsOfUnity
 
+
 class TestRootsOfUnity:
     def test_first_element_is_one(self, domain):
         # omega^0 = 1 should always be the first natural element
@@ -75,7 +77,9 @@ class TestRootsOfUnity:
     def test_coset_fft_ifft_roundtrip(self, domain):
         coeffs = [secrets.randbelow(FIELD_PRIME) for _ in range(_M)]
         beta = 7
-        assert domain.coset_ifft(domain.coset_fft(coeffs, beta), beta) == coeffs
+        assert (
+            domain.coset_ifft(domain.coset_fft(coeffs, beta), beta) == coeffs
+        )
 
     def test_coset_vanishing_degree(self, domain):
         # Vanishing polynomial of a cell should have degree D
@@ -99,6 +103,7 @@ class TestRootsOfUnity:
 
 # KZGSetup / SRS
 
+
 class TestKZGSetup:
     def test_srs_g1_length(self, srs):
         assert len(srs.g1_powers) == 256  # max_degree + 1
@@ -118,6 +123,7 @@ class TestKZGSetup:
 
 # CCrow - single blob commit / open / verify
 
+
 class TestCCrow:
     def test_commit_returns_curve_point(self, ccrow, blob):
         com, state = ccrow.commit(blob)
@@ -134,9 +140,9 @@ class TestCCrow:
         com, state = ccrow.commit(blob)
         for cell_idx in range(_N):
             values, proof = ccrow.open(state, cell_idx)
-            assert ccrow.verify(com, cell_idx, values, proof), (
-                f"Valid proof rejected for cell {cell_idx}"
-            )
+            assert ccrow.verify(
+                com, cell_idx, values, proof
+            ), f"Valid proof rejected for cell {cell_idx}"
 
     def test_verify_rejects_tampered_values(self, ccrow, blob):
         com, state = ccrow.commit(blob)
@@ -147,9 +153,9 @@ class TestCCrow:
         bad_values = list(values)
         bad_values[0] = (bad_values[0] + 1) % FIELD_PRIME
 
-        assert not ccrow.verify(com, cell_idx, bad_values, proof), (
-            "Tampered values should not verify"
-        )
+        assert not ccrow.verify(
+            com, cell_idx, bad_values, proof
+        ), "Tampered values should not verify"
 
     def test_verify_rejects_wrong_cell_index(self, ccrow, blob):
         com, state = ccrow.commit(blob)
@@ -189,21 +195,22 @@ class TestCCrow:
         com, state = ccrow.commit(blob)
         for cell_idx in [0, _N - 1]:
             values, proof = ccrow.open(state, cell_idx)
-            assert ccrow.verify(com, cell_idx, values, proof), (
-                f"Boundary cell {cell_idx} failed verification"
-            )
+            assert ccrow.verify(
+                com, cell_idx, values, proof
+            ), f"Boundary cell {cell_idx} failed verification"
 
     def test_proof_does_not_verify_against_different_commitment(self, ccrow):
         # A proof from one blob should not pass under a different commitment
         blob_a = [1] * (_D * _K)
         blob_b = [2] * (_D * _K)
         com_a, state_a = ccrow.commit(blob_a)
-        com_b, _       = ccrow.commit(blob_b)
-        values, proof  = ccrow.open(state_a, 0)
+        com_b, _ = ccrow.commit(blob_b)
+        values, proof = ccrow.open(state_a, 0)
         assert not ccrow.verify(com_b, 0, values, proof)
 
 
 # reconstruct_extended_blob
+
 
 class TestReconstructExtendedBlob:
     def test_full_reconstruction_from_k_cells(self, ccrow, domain, blob):
@@ -228,9 +235,9 @@ class TestReconstructExtendedBlob:
         for j in range(_N):
             for i in range(_D):
                 pos = j * _D + i
-                assert recovered[pos] == all_cells[j][i], (
-                    f"Mismatch at cell {j}, offset {i}"
-                )
+                assert (
+                    recovered[pos] == all_cells[j][i]
+                ), f"Mismatch at cell {j}, offset {i}"
 
     def test_reconstruction_too_few_cells_raises(self, domain):
         with pytest.raises(AssertionError):
@@ -248,7 +255,12 @@ class TestReconstructExtendedBlob:
             all_cells[j] = vals
 
         # Pick k cells scattered across the range rather than the first k
-        scattered = {0: all_cells[0], 2: all_cells[2], 5: all_cells[5], 7: all_cells[7]}
+        scattered = {
+            0: all_cells[0],
+            2: all_cells[2],
+            5: all_cells[5],
+            7: all_cells[7],
+        }
         assert len(scattered) == _K
 
         recovered = reconstruct_extended_blob(
@@ -258,12 +270,13 @@ class TestReconstructExtendedBlob:
         for j in range(_N):
             for i in range(_D):
                 pos = j * _D + i
-                assert recovered[pos] == all_cells[j][i], (
-                    f"Mismatch at cell {j}, offset {i}"
-                )
+                assert (
+                    recovered[pos] == all_cells[j][i]
+                ), f"Mismatch at cell {j}, offset {i}"
 
 
 # CCfull - multi-blob matrix commit / open / batch verify
+
 
 class TestCCfull:
     @pytest.fixture(scope="class")
@@ -307,12 +320,14 @@ class TestCCfull:
         cells_b, proofs_b = ccfull.open(states, col_b)
 
         # Flatten into the format batch_verify expects
-        all_cells   = cells_a  + cells_b
-        all_proofs  = proofs_a + proofs_b
-        row_indices = [0, 1,    0, 1]
+        all_cells = cells_a + cells_b
+        all_proofs = proofs_a + proofs_b
+        row_indices = [0, 1, 0, 1]
         col_indices = [col_a, col_a, col_b, col_b]
 
-        assert ccfull.batch_verify(coms, col_indices, row_indices, all_cells, all_proofs)
+        assert ccfull.batch_verify(
+            coms, col_indices, row_indices, all_cells, all_proofs
+        )
 
     def test_batch_verify_rejects_tampered_cell(self, ccfull, two_blobs):
         coms, states = ccfull.commit(two_blobs)
