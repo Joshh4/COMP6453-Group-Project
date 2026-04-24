@@ -1,5 +1,16 @@
 # COMP6453-Group-Project
-Implementing Data Availability Sampling using the CONDA Scheme.
+Implementing Data Availability Sampling using the PeerDAS Scheme.
+
+## Runtime
+This command allows you to run PeerDAS
+```bash
+python3 -m src.nodes.peerdas_network # or python -m src.nodes.peerdas_network
+```
+
+## Demo
+Here is a link to our Google Drive which contains our demo video. Email z5418984@ad.unsw.edu.au
+if there are any issues
+https://drive.google.com/file/d/1iw6CiPm7F-nTGL1RlXNE05Di0XbWlJAt/view?usp=drive_link 
 
 ## Every Time You Start Working
 ```bash
