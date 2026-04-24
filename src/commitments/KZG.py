@@ -316,7 +316,7 @@ class KZGProver:
         ]
 
         # Build I(X): the unique polynomial that matches f at those D points
-        I = self.domain.lagrange_interpolate_coset(D, cell_index, cell_values)  # noqa
+        I = self.domain.lagrange_interpolate_coset(D, cell_index, cell_values)
 
         # z(X) = X^D - coset_root is the vanishing polynomial of this
         # cell's coset
@@ -454,7 +454,7 @@ class CCrow:
         # each blob element at the corresponding domain point
         assert (
             len(blob_data) == self.D * self.k
-        ), f"blob_data must have D*k={self.D * self.k} elements, got {len(blob_data)}"  # noqa
+        ), f"blob_data must have D*k={self.D * self.k} elements, got {len(blob_data)}"
         points = [self.domain.element(i) for i in range(self.D * self.k)]
         f = Poly.lagrange_interpolate(points, blob_data, self.domain.p)
         com = self.prover.commit(f)

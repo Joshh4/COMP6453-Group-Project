@@ -87,6 +87,15 @@ class TestRootsOfUnity:
             pt = domain.element(0 * _D + i)
             assert (pow(pt, _D, p) - coset_root) % p == 0
 
+    def test_all_domain_elements_distinct(self, domain):
+        # A valid group of roots of unity should have no duplicates
+        elements = [domain.element(i) for i in range(_M)]
+        assert len(set(elements)) == _M
+
+    def test_element_wraps_at_m(self, domain):
+        # element(m) should cycle back to element(0)
+        assert domain.element(_M) == domain.element(0)
+
 
 # KZGSetup / SRS
 
@@ -152,6 +161,47 @@ class TestCCrow:
         with pytest.raises(AssertionError):
             ccrow.commit([1, 2, 3])  # too short
 
+    def test_different_blobs_produce_different_commitments(self, ccrow):
+        # Two distinct blobs must not collide at the same commitment
+        blob_a = [1] * (_D * _K)
+        blob_b = [2] * (_D * _K)
+        com_a, _ = ccrow.commit(blob_a)
+        com_b, _ = ccrow.commit(blob_b)
+        assert com_a != com_b
+
+    def test_open_is_deterministic(self, ccrow, blob):
+        # Opening the same cell twice should give identical results
+        _, state = ccrow.commit(blob)
+        values_1, proof_1 = ccrow.open(state, 0)
+        values_2, proof_2 = ccrow.open(state, 0)
+        assert values_1 == values_2
+        assert proof_1 == proof_2
+
+    def test_zero_blob_commits_and_verifies(self, ccrow):
+        # A blob of all zeros is a valid edge case
+        zero_blob = [0] * (_D * _K)
+        com, state = ccrow.commit(zero_blob)
+        values, proof = ccrow.open(state, 0)
+        assert ccrow.verify(com, 0, values, proof)
+
+    def test_verify_boundary_cells(self, ccrow, blob):
+        # Check the first and last cell indices explicitly
+        com, state = ccrow.commit(blob)
+        for cell_idx in [0, _N - 1]:
+            values, proof = ccrow.open(state, cell_idx)
+            assert ccrow.verify(com, cell_idx, values, proof), (
+                f"Boundary cell {cell_idx} failed verification"
+            )
+
+    def test_proof_does_not_verify_against_different_commitment(self, ccrow):
+        # A proof from one blob should not pass under a different commitment
+        blob_a = [1] * (_D * _K)
+        blob_b = [2] * (_D * _K)
+        com_a, state_a = ccrow.commit(blob_a)
+        com_b, _       = ccrow.commit(blob_b)
+        values, proof  = ccrow.open(state_a, 0)
+        assert not ccrow.verify(com_b, 0, values, proof)
+
 
 # reconstruct_extended_blob
 
@@ -188,6 +238,30 @@ class TestReconstructExtendedBlob:
                 domain, {0: [0] * _D}, D=_D, k=_K, n=_N
             )  # only 1 cell, need k=4
 
+    def test_reconstruction_from_scattered_cells(self, ccrow, domain, blob):
+        # Recovery should work even when the k cells are not contiguous
+        com, state = ccrow.commit(blob)
+
+        all_cells = {}
+        for j in range(_N):
+            vals, _ = ccrow.open(state, j)
+            all_cells[j] = vals
+
+        # Pick k cells scattered across the range rather than the first k
+        scattered = {0: all_cells[0], 2: all_cells[2], 5: all_cells[5], 7: all_cells[7]}
+        assert len(scattered) == _K
+
+        recovered = reconstruct_extended_blob(
+            domain, scattered, D=_D, k=_K, n=_N
+        )
+
+        for j in range(_N):
+            for i in range(_D):
+                pos = j * _D + i
+                assert recovered[pos] == all_cells[j][i], (
+                    f"Mismatch at cell {j}, offset {i}"
+                )
+
 
 # CCfull - multi-blob matrix commit / open / batch verify
 
@@ -212,6 +286,17 @@ class TestCCfull:
         col = 0
         cells, proofs = ccfull.open(states, col)
         assert ccfull.verify_column(coms, col, cells, proofs)
+
+    def test_verify_column_rejects_tampered_cell(self, ccfull, two_blobs):
+        coms, states = ccfull.commit(two_blobs)
+        col = 0
+        cells, proofs = ccfull.open(states, col)
+
+        # Corrupt the second value in the first row's cell
+        bad_cells = [list(c) for c in cells]
+        bad_cells[0][1] = (bad_cells[0][1] + 1) % FIELD_PRIME
+
+        assert not ccfull.verify_column(coms, col, bad_cells, proofs)
 
     def test_batch_verify_valid(self, ccfull, two_blobs):
         coms, states = ccfull.commit(two_blobs)
