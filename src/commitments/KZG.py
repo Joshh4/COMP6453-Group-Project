@@ -195,7 +195,6 @@ class RootsOfUnity:
 
     def coset_fft(self, coeffs: list, beta: int) -> list:
         # Evaluate a polynomial over the shifted domain beta*H
-        # Trick: multiply coeff[i] by beta^i, then run a normal FFT
         p = self.p
         assert len(coeffs) == self.m
         beta_power = 1
@@ -317,7 +316,7 @@ class KZGProver:
         ]
 
         # Build I(X): the unique polynomial that matches f at those D points
-        I = self.domain.lagrange_interpolate_coset(D, cell_index, cell_values)  # noqa (ignore ruff variable rules)
+        I = self.domain.lagrange_interpolate_coset(D, cell_index, cell_values)  # noqa
 
         # z(X) = X^D - coset_root is the vanishing polynomial of this
         # cell's coset
@@ -325,7 +324,7 @@ class KZGProver:
 
         # Q(X) = (f(X) - I(X)) / z(X) — this division is exact because f and I
         # agree on all D coset points, so f - I vanishes there
-        f_minus_I = poly - I  # noqa (ignore ruff variable rules)
+        f_minus_I = poly - I
         quotient, remainder = Poly.divmod(f_minus_I, z, FIELD_PRIME)
 
         if any(c % FIELD_PRIME != 0 for c in remainder.coeffs()):
@@ -339,7 +338,6 @@ class KZGProver:
 
     def prove_all_cells(self, poly: Poly, n_cells: int = N_CELLS_EXT):
         # Naive: compute each cell's proof separately
-        # (O(n*d) — use FK for production)
         return [self.multi_open(poly, j) for j in range(n_cells)]
 
 
@@ -354,7 +352,7 @@ class KZGVerifier:
     def multi_verify(
         self, commitment, cell_index: int, cell_values: list, proof
     ) -> bool:
-        # cell_index is 0-based (see note in multi_open)
+        # cell_index is 0-based
         D = self.D
         r, coset_root = self.domain.coset_vanishing(D, cell_index)
 
@@ -456,7 +454,7 @@ class CCrow:
         # each blob element at the corresponding domain point
         assert (
             len(blob_data) == self.D * self.k
-        ), f"blob_data must have D*k={self.D * self.k} elements, got {len(blob_data)}"  # noqa (ignore ruff line length)
+        ), f"blob_data must have D*k={self.D * self.k} elements, got {len(blob_data)}"  # noqa
         points = [self.domain.element(i) for i in range(self.D * self.k)]
         f = Poly.lagrange_interpolate(points, blob_data, self.domain.p)
         com = self.prover.commit(f)
