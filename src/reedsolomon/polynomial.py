@@ -44,7 +44,7 @@ class Poly:
     def equal(self, other):
         if not isinstance(other, Poly):
             return NotImplemented
-         
+
         a_zero = self._coeffs[0] * 0
         b_zero = other._coeffs[0] * 0
 
@@ -56,11 +56,11 @@ class Poly:
 
             if len(self._coeffs) != len(other._coeffs):
                 return False
-            
+
             for x, y in zip(self._coeffs, other._coeffs):
                 if abs(x - y) > epsilon:
                     return False
-            
+
             return True
 
     def __call__(self, x):
@@ -115,7 +115,7 @@ class Poly:
 
         if isinstance(other, int):
             return Poly([other * x for x in self._coeffs])
-        
+
         if isinstance(other, float):
             return Poly([other * x for x in self._coeffs])
 
