@@ -1,4 +1,5 @@
 import pytest
+
 from src.commitments.merkle_tree import MerkleTree
 
 
@@ -29,7 +30,8 @@ def test_valid_proof(chunks):
     sample_index = 2
     proof = tree.get_proof(sample_index)
 
-    valid = MerkleTree.verify_proof(chunks[sample_index], proof, tree.get_root())
+    valid = MerkleTree.verify_proof(chunks[sample_index], 
+                                    proof, tree.get_root())
     assert valid is True
 
 # Test that modifying a sibling hash causes verification to fail
@@ -41,7 +43,8 @@ def test_invalid_proof_changed_sibling_hash(chunks):
     bad_proof = proof[:]
     bad_proof[0] = (b"\x00" * 32, bad_proof[0][1])
 
-    valid = MerkleTree.verify_proof(chunks[sample_index], bad_proof, tree.get_root())
+    valid = MerkleTree.verify_proof(chunks[sample_index], 
+                                    bad_proof, tree.get_root())
     assert valid is False
 
 # Test that changing the direction (left/right) breaks the proof
@@ -53,7 +56,8 @@ def test_invalid_proof_changed_direction(chunks):
     bad_proof = proof[:]
     bad_proof[0] = (bad_proof[0][0], "left")
 
-    valid = MerkleTree.verify_proof(chunks[sample_index], bad_proof, tree.get_root())
+    valid = MerkleTree.verify_proof(chunks[sample_index], 
+                                    bad_proof, tree.get_root())
     assert valid is False
 
 # Test that using a different chunk with the same proof fails verification
@@ -73,7 +77,8 @@ def test_invalid_proof_different_root(chunks, chunks_2):
     sample_index = 2
     proof = tree1.get_proof(sample_index)
 
-    valid = MerkleTree.verify_proof(chunks[sample_index], proof, tree2.get_root())
+    valid = MerkleTree.verify_proof(chunks[sample_index], 
+                                    proof, tree2.get_root())
     assert valid is False
 
 # Test that creating a tree with no chunks raises ValueError

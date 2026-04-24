@@ -17,8 +17,7 @@ from src.nodes.peerdas_network import (
     SubnetRegistry,
     Verifier,
 )
-from src.sampling.sampler import ColumnResult, SampleResult, Sampler
-
+from src.sampling.sampler import ColumnResult, Sampler, SampleResult
 
 # ---------------------------------------------------------------------------
 # Shared test fixtures
@@ -109,7 +108,8 @@ class TestSamplerAllColumnsVerify(unittest.IsolatedAsyncioTestCase):
 class TestSamplerKZGFails(unittest.IsolatedAsyncioTestCase):
 
     async def test_failed_kzg_counted_as_failed(self):
-        """When verify_column returns False, result should show failed_count."""
+        """When verify_column returns False, result 
+        should show failed_count."""
         async def fetch(node, block_id, col_idx):
             return _good_resp(col_idx)
 

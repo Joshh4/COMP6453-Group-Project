@@ -35,7 +35,6 @@ TestEncodeMatrix
 import asyncio
 import json
 import unittest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.nodes.peerdas_network import (
     MSG_COLUMN,
@@ -47,12 +46,10 @@ from src.nodes.peerdas_network import (
     Disperser,
     NodeInfo,
     SubnetRegistry,
-    Verifier,
     _encode_matrix,
     decode_msg,
     encode_msg,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

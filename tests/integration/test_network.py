@@ -141,7 +141,8 @@ class TestSimpleRoundTrip(unittest.TestCase):
         self.run_async(_run())
 
     def test_03_tampered_cell_fails_verification(self):
-        """Flipping a byte in a cell should cause verify_column to return False."""
+        """Flipping a byte in a cell 
+        should cause verify_column to return False."""
         async def _run():
             block_id = await self.disp.disperse(b"tamper test data" * 4)
             await asyncio.sleep(0.2)
@@ -272,7 +273,8 @@ class TestSimpleRoundTrip(unittest.TestCase):
         self.run_async(_run())
 
     def test_06_missing_block_returns_unavailable(self):
-        """Requesting a block that was never dispersed should return MSG_UNAVAILABLE."""
+        """Requesting a block that was never dispersed 
+        should return MSG_UNAVAILABLE."""
         async def _run():
             resp = await self.verifier.fetch_column(
                 self.da_info, "nonexistentblock123", 0

@@ -133,12 +133,14 @@ class TestMultiNodeRoundTrip(unittest.TestCase):
             for node_name, cols in custody_map.items():
                 da_info = self.da_infos[node_name]
                 for col_i in cols:
-                    resp = await self.verifier.fetch_column(da_info, block_id, col_i)
+                    resp = await self.verifier.fetch_column(da_info, 
+                                                            block_id, col_i)
                     self.assertIsNotNone(resp)
                     self.assertEqual(resp.get("type"), MSG_SAMPLE_RESP)
                     self.assertTrue(
                         self.kzg.verify_column(
-                            resp["commitments"], col_i, resp["cells"], resp["proof"]
+                            resp["commitments"], col_i, 
+                            resp["cells"], resp["proof"]
                         ),
                         "KZG proof for column 0 should verify",
                     )
@@ -146,7 +148,8 @@ class TestMultiNodeRoundTrip(unittest.TestCase):
         self.run_async(_run())
 
     def test_wrong_node_returns_unavailable(self):
-        """Requesting a block that was never dispersed should return MSG_UNAVAILABLE."""
+        """Requesting a block that was never 
+        dispersed should return MSG_UNAVAILABLE."""
         async def _run():
             block_id = await self.disp.disperse(b"custody boundary test" * 4)
             await asyncio.sleep(0.2)
